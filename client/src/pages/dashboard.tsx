@@ -8,16 +8,17 @@ import { ActivityStream } from "@/components/activity-stream";
 import { ShipmentTable } from "@/components/shipment-table";
 import { StatusFilters } from "@/components/status-filters";
 import { ChatInterface } from "@/components/chat-interface";
+import { ShipmentDetailsDialog } from "@/components/shipment-details-dialog";
 import type { Shipment, Activity, APStatus, ARStatus, SimulationState } from "@shared/schema";
 
 const INITIAL_SHIPMENTS: Shipment[] = [
   {
     id: "SHP-001",
-    shipmentNumber: "FRT-2024-0847",
-    origin: "Los Angeles, CA",
-    destination: "Dallas, TX",
-    carrier: "Swift Logistics",
-    shipper: "TechCorp Industries",
+    shipmentNumber: "WFL-2026-0847",
+    origin: "Los Angeles",
+    destination: "Phoenix",
+    carrier: "DESERT HAULERS TRUCKING INC",
+    shipper: "PACIFIC RIM IMPORTS INC",
     laneRate: 2850,
     invoiceAmount: 3150,
     detentionCharge: 300,
@@ -71,156 +72,166 @@ interface SimStep {
   };
 }
 
-const createAPSteps = (shipment: Shipment): SimStep[] => [
-  {
-    delay: 1000,
-    type: "email_received",
-    title: `Delivery Confirmation - ${shipment.shipmentNumber}`,
-    description: `Email from ${shipment.carrier} confirming delivery to ${shipment.destination}`,
-    status: "received" as APStatus,
-    document: { name: "Carrier Delivery Email", url: "/demo/emails/email_01_carrier_delivery_complete.pdf" }
-  },
-  {
-    delay: 2000,
-    type: "email_draft" as const,
-    title: `Drafting Document Request - ${shipment.shipmentNumber}`,
-    description: `Drafted email to ${shipment.carrier} asking for POD, BOL, and Invoice`,
-    status: "received" as APStatus,
-    requiresApproval: true,
-    draftContent: {
-      to: "claims@swiftlogistics.com",
-      subject: `Document Request - ${shipment.shipmentNumber}`,
-      body: `Hello,\n\nPlease provide the Proof of Delivery, Bill of Lading, and Invoice for shipment ${shipment.shipmentNumber} delivered to ${shipment.destination}.\n\nThank you,\nSentie AI Auditor`
-    }
-  },
-  {
-    delay: 1000,
-    type: "email_sent",
-    title: `AI Requests Documents - ${shipment.shipmentNumber}`,
-    description: `Sentie AI sent request to ${shipment.carrier} for POD, BOL, and Invoice`,
-    status: "received" as APStatus
-  },
-  {
-    delay: 5000, // Carrier reply delay
-    type: "email_received",
-    title: `Documents Received - ${shipment.shipmentNumber}`,
-    description: `${shipment.carrier} submitted invoice with attachments: POD, BOL, Rate Con, Invoice`,
-    status: "in_review" as APStatus,
-    document: { name: "Carrier Invoice Email", url: "/demo/emails/email_02_carrier_invoice_submission.pdf" }
-  },
-  {
-    delay: 2000,
-    type: "document_scanned",
-    title: `Scanning BOL - ${shipment.shipmentNumber}`,
-    description: `Processing Bill of Lading for ${shipment.origin} to ${shipment.destination}`,
-    status: "in_review" as APStatus,
-    document: { name: "Bill of Lading", url: "/demo/documents/01_bill_of_lading.pdf" }
-  },
-  {
-    delay: 2000,
-    type: "document_scanned",
-    title: `POD Verified - ${shipment.shipmentNumber}`,
-    description: `Proof of Delivery validated - signature confirmed at ${shipment.destination}`,
-    status: "in_review" as APStatus,
-    document: { name: "Proof of Delivery", url: "/demo/documents/02_proof_of_delivery.pdf" }
-  },
-  {
-    delay: 2000,
-    type: "document_scanned",
-    title: `Rate Con Verified - ${shipment.shipmentNumber}`,
-    description: `Rate confirmation validated - agreed rate $${shipment.laneRate.toLocaleString()}`,
-    status: "in_review" as APStatus,
-    document: { name: "Rate Confirmation", url: "/demo/documents/03_rate_confirmation.pdf" }
-  },
-  {
-    delay: 2000,
-    type: "document_scanned",
-    title: `Invoice Analysis - ${shipment.shipmentNumber}`,
-    description: `Invoice for $${shipment.invoiceAmount.toLocaleString()} detected${shipment.detentionCharge ? ` (includes $${shipment.detentionCharge} detention)` : ''}`,
-    status: "in_review" as APStatus,
-    document: { name: "Carrier Invoice", url: "/demo/documents/04_carrier_invoice.pdf" }
-  },
-  ...(shipment.detentionCharge ? [
-    {
-      delay: 2000,
-      type: "issue_found" as const,
-      title: `Detention Issue - ${shipment.shipmentNumber}`,
-      description: `Carrier claims $${shipment.detentionCharge} detention but no supporting documentation provided`,
-      status: "in_dispute" as APStatus
-    },
-    {
-      delay: 2000,
-      type: "email_draft" as const,
-      title: `Drafting Detention Request - ${shipment.shipmentNumber}`,
-      description: `Drafted email to ${shipment.carrier} requesting gate logs and ELD report`,
-      status: "in_dispute" as APStatus,
-      requiresApproval: true,
-      draftContent: {
-        to: "dispatch@swiftlogistics.com",
-        subject: `Detention Documentation Request - ${shipment.shipmentNumber}`,
-        body: `Hello,\n\n regarding shipment ${shipment.shipmentNumber}, we have received a detention charge of $${shipment.detentionCharge}. \n\nPlease provide the following documentation to substantiate this claim:\n1. Signed Bill of Lading with in/out times\n2. GPS/ELD report showing arrival and departure times\n\nThank you,\nSentie AI Auditor`
-      }
-    },
+const createAPSteps = (shipment: Shipment, currentActivities: Activity[] = []): SimStep[] => {
+  const hasBOL = currentActivities.some(a => a.metadata?.document?.name === "Bill of Lading");
+  const hasPOD = currentActivities.some(a => a.metadata?.document?.name === "Proof of Delivery");
+  const hasInvoice = currentActivities.some(a => a.metadata?.document?.name === "Carrier Invoice");
+
+  const needsDocRequest = !hasBOL || !hasPOD || !hasInvoice;
+
+  return [
     {
       delay: 1000,
-      type: "email_sent" as const,
-      title: `Requesting Detention Proof - ${shipment.shipmentNumber}`,
-      description: `Sentie AI emailed ${shipment.carrier} requesting gate logs and ELD report`,
-      status: "in_dispute" as APStatus,
-      document: { name: "Detention Request Email", url: "/demo/emails/email_03_sentie_detention_docs_request.pdf" }
+      type: "email_received",
+      title: `Delivery Confirmation - ${shipment.shipmentNumber}`,
+      description: `Email from ${shipment.carrier} confirming delivery to ${shipment.destination}`,
+      status: "received" as APStatus,
+      document: { name: "Carrier Invoice", url: "/demo/documents/04_carrier_invoice.pdf" }
     },
-    {
-      delay: 8000, // Carrier reply delay
-      type: "email_received" as const,
-      title: `Detention Docs Received - ${shipment.shipmentNumber}`,
-      description: `${shipment.carrier} provided gate log and ELD report for detention claim`,
-      status: "in_review" as APStatus
-    },
+    ...(needsDocRequest ? [
+      {
+        delay: 2000,
+        type: "email_draft" as const,
+        title: `Drafting Document Request - ${shipment.shipmentNumber}`,
+        description: `Drafted email to ${shipment.carrier} asking for missing documents`,
+        status: "received" as APStatus,
+        requiresApproval: true,
+        draftContent: {
+          to: "dtorres@deserthaulers.com",
+          subject: `Document Request - ${shipment.shipmentNumber}`,
+          body: `Hello,\n\nPlease provide the ${[!hasPOD && 'Proof of Delivery', !hasBOL && 'Bill of Lading', !hasInvoice && 'Invoice'].filter(Boolean).join(', ')} for shipment ${shipment.shipmentNumber} delivered to ${shipment.destination}.\n\nThank you,\nSentie`
+        }
+      },
+      {
+        delay: 1000,
+        type: "email_sent",
+        title: `AI Requests Documents - ${shipment.shipmentNumber}`,
+        description: `Sentie sent request to ${shipment.carrier} for missing documents`,
+        status: "received" as APStatus
+      },
+      {
+        delay: 5000, // Carrier reply delay
+        type: "email_received",
+        title: `Documents Received - ${shipment.shipmentNumber}`,
+        description: `${shipment.carrier} submitted missing document(s)`,
+        status: "in_review" as APStatus,
+        document: { name: "Carrier Invoice Email", url: "/demo/emails/email_02_carrier_invoice_submission.pdf" }
+      }
+    ] : []),
     {
       delay: 2000,
-      type: "document_scanned" as const,
-      title: `Gate Log Verified - ${shipment.shipmentNumber}`,
-      description: `Gate log confirms wait time exceeding free time allowance`,
+      type: "document_scanned",
+      title: `Scanning BOL - ${shipment.shipmentNumber}`,
+      description: `Processing Bill of Lading for ${shipment.origin} to ${shipment.destination}`,
       status: "in_review" as APStatus,
-      document: { name: "Gate Log", url: "/demo/documents/08_gate_log.pdf" }
+      document: { name: "Bill of Lading", url: "/demo/documents/01_bill_of_lading.pdf" }
     },
     {
       delay: 2000,
-      type: "document_scanned" as const,
-      title: `ELD Report Verified - ${shipment.shipmentNumber}`,
-      description: `ELD data confirms truck stationary at facility, supports detention claim`,
+      type: "document_scanned",
+      title: `POD Verified - ${shipment.shipmentNumber}`,
+      description: `Proof of Delivery validated - signature confirmed at ${shipment.destination}`,
       status: "in_review" as APStatus,
-      document: { name: "ELD Report", url: "/demo/documents/09_eld_report.pdf" }
+      document: { name: "Proof of Delivery", url: "/demo/documents/02_proof_of_delivery.pdf" }
     },
     {
       delay: 2000,
-      type: "audit_complete" as const,
-      title: `AP Audit Complete - ${shipment.shipmentNumber}`,
-      description: `All documents verified. Invoice $${shipment.invoiceAmount.toLocaleString()} approved for payment.`,
-      status: "audit_pass" as APStatus
+      type: "document_scanned",
+      title: `Rate Con Verified - ${shipment.shipmentNumber}`,
+      description: `Rate confirmation validated - agreed rate $${shipment.laneRate.toLocaleString()}`,
+      status: "in_review" as APStatus,
+      document: { name: "Rate Confirmation", url: "/demo/documents/03_rate_confirmation.pdf" }
     },
-  ] : [
     {
       delay: 2000,
-      type: "audit_complete" as const,
-      title: `AP Audit Complete - ${shipment.shipmentNumber}`,
-      description: `All documents verified. Invoice $${shipment.invoiceAmount.toLocaleString()} approved for payment.`,
-      status: "audit_pass" as APStatus
+      type: "document_scanned",
+      title: `Invoice Analysis - ${shipment.shipmentNumber}`,
+      description: `Invoice for $${shipment.invoiceAmount.toLocaleString()} detected${shipment.detentionCharge ? ` (includes $${shipment.detentionCharge} detention)` : ''}`,
+      status: "in_review" as APStatus,
+      document: { name: "Carrier Invoice", url: "/demo/documents/04_carrier_invoice.pdf" }
     },
-  ])
-];
+    ...(shipment.detentionCharge ? [
+      {
+        delay: 2000,
+        type: "issue_found" as const,
+        title: `Detention Issue - ${shipment.shipmentNumber}`,
+        description: `Carrier claims $${shipment.detentionCharge} detention but no supporting documentation provided`,
+        status: "in_dispute" as APStatus
+      },
+      {
+        delay: 2000,
+        type: "email_draft" as const,
+        title: `Drafting Detention Request - ${shipment.shipmentNumber}`,
+        description: `Drafted email to ${shipment.carrier} requesting gate logs and ELD report`,
+        status: "in_dispute" as APStatus,
+        requiresApproval: true,
+        draftContent: {
+          to: "dtorres@deserthaulers.com",
+          subject: `Detention Documentation Request - ${shipment.shipmentNumber}`,
+          body: `Hello,\n\n regarding shipment ${shipment.shipmentNumber}, we have received a detention charge of $${shipment.detentionCharge}. \n\nPlease provide the following documentation to substantiate this claim:\n${hasBOL ? '' : '1. Signed Bill of Lading with in/out times\n'}2. GPS/ELD report showing arrival and departure times\n\nThank you,\nSentie`
+        }
+      },
+      {
+        delay: 1000,
+        type: "email_sent" as const,
+        title: `Requesting Detention Proof - ${shipment.shipmentNumber}`,
+        description: `Sentie emailed ${shipment.carrier} requesting gate logs and ELD report`,
+        status: "in_dispute" as APStatus,
+        document: { name: "Detention Request Email", url: "/demo/emails/email_03_sentie_detention_docs_request.pdf" }
+      },
+      {
+        delay: 8000, // Carrier reply delay
+        type: "email_received" as const,
+        title: `Detention Docs Received - ${shipment.shipmentNumber}`,
+        description: `${shipment.carrier} provided gate log and ELD report for detention claim`,
+        status: "in_review" as APStatus
+      },
+      {
+        delay: 2000,
+        type: "document_scanned" as const,
+        title: `Gate Log Verified - ${shipment.shipmentNumber}`,
+        description: `Gate log confirms wait time exceeding free time allowance`,
+        status: "in_review" as APStatus,
+        document: { name: "Gate Log", url: "/demo/documents/08_gate_log.pdf" }
+      },
+      {
+        delay: 2000,
+        type: "document_scanned" as const,
+        title: `ELD Report Verified - ${shipment.shipmentNumber}`,
+        description: `ELD data confirms truck stationary at facility, supports detention claim`,
+        status: "in_review" as APStatus,
+        document: { name: "ELD Report", url: "/demo/documents/09_eld_report.pdf" }
+      },
+      {
+        delay: 2000,
+        type: "audit_complete" as const,
+        title: `AP Audit Complete - ${shipment.shipmentNumber}`,
+        description: `All documents verified. Invoice $${shipment.invoiceAmount.toLocaleString()} approved for payment.`,
+        status: "audit_pass" as APStatus
+      },
+    ] : [
+      {
+        delay: 2000,
+        type: "audit_complete" as const,
+        title: `AP Audit Complete - ${shipment.shipmentNumber}`,
+        description: `All documents verified. Invoice $${shipment.invoiceAmount.toLocaleString()} approved for payment.`,
+        status: "audit_pass" as APStatus
+      },
+    ])
+  ] as SimStep[];
+};
 
-const createARSteps = (shipment: Shipment): SimStep[] => [
+const createARSteps = (shipment: Shipment, currentActivities: Activity[] = []): SimStep[] => [
   {
     delay: 1000,
-    type: "email_received",
+    type: "email_received" as const,
     title: `AR Job Opened - ${shipment.shipmentNumber}`,
     description: `Initiating accounts receivable process for shipment to ${shipment.shipper}`,
     status: "preparing" as ARStatus
   },
   {
     delay: 2000,
-    type: "document_scanned",
+    type: "document_scanned" as const,
     title: `Reviewing Agreement - ${shipment.shipmentNumber}`,
     description: `Scanning shipper agreement with ${shipment.shipper}`,
     status: "preparing" as ARStatus,
@@ -228,7 +239,7 @@ const createARSteps = (shipment: Shipment): SimStep[] => [
   },
   {
     delay: 2000,
-    type: "document_scanned",
+    type: "document_scanned" as const,
     title: `Lane Contract Verified - ${shipment.shipmentNumber}`,
     description: `Lane contract confirms rate for ${shipment.origin} to ${shipment.destination}`,
     status: "preparing" as ARStatus,
@@ -236,7 +247,7 @@ const createARSteps = (shipment: Shipment): SimStep[] => [
   },
   {
     delay: 2000,
-    type: "invoice_created",
+    type: "invoice_created" as const,
     title: `Invoice Generated - ${shipment.shipmentNumber}`,
     description: `Created broker invoice for ${shipment.shipper}${shipment.detentionCharge ? ` including $${shipment.detentionCharge} detention` : ''}`,
     status: "preparing" as ARStatus,
@@ -244,7 +255,7 @@ const createARSteps = (shipment: Shipment): SimStep[] => [
   },
   {
     delay: 2000,
-    type: "document_scanned",
+    type: "document_scanned" as const,
     title: `Evidence Packet Ready - ${shipment.shipmentNumber}`,
     description: `Compiled POD, delivery confirmation, and supporting documentation`,
     status: "for_review" as ARStatus
@@ -257,14 +268,14 @@ const createARSteps = (shipment: Shipment): SimStep[] => [
     status: "for_review" as ARStatus,
     requiresApproval: true,
     draftContent: {
-      to: "accounts.payable@techcorp.com",
+      to: "jwu@pacificrimports.com",
       subject: `Invoice for Shipment ${shipment.shipmentNumber}`,
-      body: `Attached is the invoice for shipment ${shipment.shipmentNumber} from ${shipment.origin} to ${shipment.destination}.\n\nTotal Amount: $${shipment.invoiceAmount.toLocaleString()}\n\nPlease find the following documents attached:\n- Broker Invoice\n- Proof of Delivery\n- Bill of Lading\n\nKind regards,\nSentie Logistics`
+      body: `Attached is the invoice for shipment ${shipment.shipmentNumber} from ${shipment.origin} to ${shipment.destination}.\n\nLine Items:\n- Base Freight: $${shipment.laneRate.toLocaleString()}\n${shipment.detentionCharge ? `- Detention: $${shipment.detentionCharge.toLocaleString()}\n` : ''}- Total Amount: $${shipment.invoiceAmount.toLocaleString()}\n\nPlease find the following documents attached:\n- Broker Invoice\n- Proof of Delivery\n- Bill of Lading\n\nKind regards,\nSentie`
     }
   },
   {
     delay: 1000,
-    type: "email_sent",
+    type: "email_sent" as const,
     title: `Invoice Sent - ${shipment.shipmentNumber}`,
     description: `Invoice emailed to ${shipment.shipper} with attached documentation`,
     status: "submitted" as ARStatus,
@@ -272,14 +283,13 @@ const createARSteps = (shipment: Shipment): SimStep[] => [
   },
   {
     delay: 5000,
-    type: "payment_received",
+    type: "payment_received" as const,
     title: `AR Complete - ${shipment.shipmentNumber}`,
     description: `Invoice submitted to ${shipment.shipper}. Payment tracking initiated.`,
     status: "submitted" as ARStatus
   },
 ];
 
-import { ShipmentDetailsDialog } from "@/components/shipment-details-dialog";
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<"ap" | "ar">("ap");
@@ -290,6 +300,17 @@ export default function Dashboard() {
   });
   const [activities, setActivities] = useState<Activity[]>([]);
   const [shipments, setShipments] = useState<Shipment[]>(INITIAL_SHIPMENTS);
+
+  const activitiesRef = useRef<Activity[]>(activities);
+  const shipmentsRef = useRef<Shipment[]>(shipments);
+
+  useEffect(() => {
+    activitiesRef.current = activities;
+  }, [activities]);
+
+  useEffect(() => {
+    shipmentsRef.current = shipments;
+  }, [shipments]);
   const [apFilter, setApFilter] = useState<APStatus | "all">("all");
   const [arFilter, setArFilter] = useState<ARStatus | "all">("all");
   const [completedAPShipments, setCompletedAPShipments] = useState<Set<string>>(new Set());
@@ -306,7 +327,8 @@ export default function Dashboard() {
   }, []);
 
   const runARForShipment = useCallback((shipment: Shipment, stepIndex: number = 0) => {
-    const arSteps = createARSteps(shipment);
+    // Use ref to avoid stale closure issues
+    const arSteps = createARSteps(shipment, activitiesRef.current);
     if (stepIndex >= arSteps.length) return;
 
     // Update active step for resumption
@@ -366,7 +388,8 @@ export default function Dashboard() {
   }, []);
 
   const runAPForShipment = useCallback((shipment: Shipment, stepIndex: number = 0) => {
-    const apSteps = createAPSteps(shipment);
+    // Use the ref to get the absolute latest activities and avoid stale closures
+    const apSteps = createAPSteps(shipment, activitiesRef.current);
     if (stepIndex >= apSteps.length) return;
 
     // Update active step for resumption
@@ -623,7 +646,7 @@ export default function Dashboard() {
                 <Bot className="w-6 h-6 text-primary-foreground" />
               </div>
               <div>
-                <h1 className="text-xl font-semibold">Sentie AI</h1>
+                <h1 className="text-xl font-semibold">Sentie</h1>
                 <p className="text-sm text-muted-foreground">AP AR on autopilot</p>
               </div>
             </div>
@@ -710,8 +733,8 @@ export default function Dashboard() {
                       activities={apActivities}
                       emptyMessage="Start the demo to see AP activities"
                       onAction={(activity) => {
+                        // Open the draft directly from the activity stream.
                         setDraftToApprove(activity.shipmentId);
-                        setSelectedShipment(shipments.find(s => s.id === activity.shipmentId) || null);
                       }}
                     />
                   </CardContent>
@@ -770,7 +793,7 @@ export default function Dashboard() {
                       activities={arActivities}
                       emptyMessage="AR process starts after each shipment's AP audit is complete"
                       onAction={(activity) => {
-                        setDraftToApprove(activity.shipmentId);
+                        // Just open the shipment details. User can click "Review Draft" from there.
                         setSelectedShipment(shipments.find(s => s.id === activity.shipmentId) || null);
                       }}
                     />
@@ -817,14 +840,14 @@ export default function Dashboard() {
         shipment={selectedShipment ? (shipments.find(s => s.id === selectedShipment.id) || selectedShipment) : null}
         activities={activities}
         open={!!selectedShipment}
-        onOpenChange={(open) => !open && setSelectedShipment(null)}
-        onAction={(shipmentId) => setDraftToApprove(shipmentId)}
+        onOpenChange={(open: boolean) => !open && setSelectedShipment(null)}
+        onAction={(shipmentId: string) => setDraftToApprove(shipmentId)}
         context={activeTab}
       />
 
       <EmailApprovalDialog
-        open={Object.keys(pendingDrafts).length > 0 && !!selectedShipment && !!pendingDrafts[selectedShipment.id]}
-        onOpenChange={(open) => !open && setSelectedShipment(null)} // Close dialog closes selected shipment focus if we want? Actually let's just use a separate state if needed, or re-use selectedShipment logic.
+        open={!!draftToApprove}
+        onOpenChange={(open: boolean) => !open && setDraftToApprove(null)}
         /* 
           Actually, we need to know WHICH draft we are approving. 
           If handling from ActivityStream action, we need a way to open this dialog.

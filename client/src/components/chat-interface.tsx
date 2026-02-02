@@ -16,7 +16,7 @@ export function ChatInterface() {
     const [messages, setMessages] = useState<Message[]>([
         {
             role: "assistant",
-            content: "Hello! I'm Sentie AI. How can I help you with your shipments today?",
+            content: "Hello! I'm Sentie. How can I help you with your shipments today?",
             timestamp: new Date(),
         },
     ]);
@@ -45,7 +45,7 @@ export function ChatInterface() {
         setTimeout(() => {
             const assistantMessage: Message = {
                 role: "assistant",
-                content: "I'm Sentie AI, your logistics assistant. I'm currently in demo mode, but soon I'll be able to help you reconcile invoices, track shipments, and resolve disputes in real-time!",
+                content: "I'm Sentie, your logistics assistant. I'm currently in demo mode, but soon I'll be able to help you reconcile invoices, track shipments, and resolve disputes in real-time!",
                 timestamp: new Date(),
             };
             setMessages((prev) => [...prev, assistantMessage]);
@@ -58,7 +58,7 @@ export function ChatInterface() {
                 <CardTitle className="flex items-center justify-between text-lg">
                     <div className="flex items-center gap-2">
                         <Sparkles className="w-5 h-5 text-primary animate-pulse" />
-                        Sentie AI Assistant
+                        Sentie Assistant
                     </div>
                     <Badge variant="secondary" className="text-[10px] h-5 uppercase tracking-wider">Beta</Badge>
                 </CardTitle>
@@ -74,8 +74,8 @@ export function ChatInterface() {
                             >
                                 <div
                                     className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${msg.role === "assistant"
-                                            ? "bg-primary text-primary-foreground"
-                                            : "bg-muted text-muted-foreground"
+                                        ? "bg-primary text-primary-foreground"
+                                        : "bg-muted text-muted-foreground"
                                         }`}
                                 >
                                     {msg.role === "assistant" ? (
@@ -86,8 +86,8 @@ export function ChatInterface() {
                                 </div>
                                 <div
                                     className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm ${msg.role === "assistant"
-                                            ? "bg-muted/50 text-foreground rounded-tl-none"
-                                            : "bg-primary text-primary-foreground rounded-tr-none"
+                                        ? "bg-muted/50 text-foreground rounded-tl-none"
+                                        : "bg-primary text-primary-foreground rounded-tr-none"
                                         }`}
                                 >
                                     {msg.content}
@@ -105,7 +105,7 @@ export function ChatInterface() {
                         className="flex gap-2"
                     >
                         <Input
-                            placeholder="Ask Sentie AI anything..."
+                            placeholder="Ask Sentie anything..."
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             className="bg-background border-primary/10 focus-visible:ring-primary/30"

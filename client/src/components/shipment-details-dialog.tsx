@@ -66,15 +66,15 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
             // AR Logic
             const sent = shipment.arStatus === 'submitted' || shipment.arStatus === 'collected';
 
-            // If sent, everything is completed by definition
-            const hasLoadData = sent || true;
-            const loadedRateContract = sent || activities.some(a => a.title.includes('Rate Contract'));
-            const calculatedCharge = sent || activities.some(a => a.title.includes('Charge Calculated') || shipment.invoiceAmount > 0);
-            const foundAccessorials = sent || activities.some(a => a.title.includes('Accessorial'));
-            const builtPacket = sent || activities.some(a => a.title.includes('Packet'));
+            // Tie logic strictly to activities or final status
+            const hasLoadData = sent || activities.some(a => a.category === 'ar' && a.title.includes('AR Job Opened'));
+            const loadedRateContract = sent || activities.some(a => a.category === 'ar' && (a.title.includes('Agreement') || a.title.includes('Contract')));
+            const calculatedCharge = sent || activities.some(a => a.category === 'ar' && a.type === 'invoice_created');
+            const foundAccessorials = sent || activities.some(a => a.category === 'ar' && a.title.includes('Evidence')); // "Evidence Packet Ready" implies accessorials checked
+            const builtPacket = sent || activities.some(a => a.category === 'ar' && (a.title.includes('Packet') || a.title.includes('Drafting')));
 
             items.push({ id: 'ar-1', label: 'Collecting load data', status: hasLoadData ? 'completed' : 'in-progress' });
-            items.push({ id: 'ar-2', label: 'Loading rate contract', status: loadedRateContract ? 'completed' : 'in-progress' });
+            items.push({ id: 'ar-2', label: 'Loading rate contract', status: loadedRateContract ? 'completed' : (hasLoadData ? 'in-progress' : 'pending') });
             items.push({ id: 'ar-3', label: 'Calculating rate charge', status: calculatedCharge ? 'completed' : (loadedRateContract ? 'in-progress' : 'pending') });
             items.push({ id: 'ar-4', label: 'Finding accessorials', status: foundAccessorials ? 'completed' : (calculatedCharge ? 'in-progress' : 'pending') });
             items.push({ id: 'ar-5', label: 'Building evidence packet', status: builtPacket ? 'completed' : (foundAccessorials ? 'in-progress' : 'pending') });
@@ -219,7 +219,19 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
                         <div className="bg-orange-50 border border-orange-200 rounded-md p-3 flex items-center justify-between">
                             <div className="flex items-center gap-2 text-orange-800">
                                 <AlertCircle className="h-5 w-5" />
-                                <span className="font-medium">Action Required: Email Draft Pending Review</span>
+                                <span className="font-medium">
+                                    {(() => {
+                                        // Find the activity that triggered this action
+                                        const pendingActivity = activities.find(a => a.type === 'email_draft' && a.metadata?.pendingAction);
+                                        if (!pendingActivity) return "Action Required: Email Draft Pending Review";
+
+                                        if (pendingActivity.title.includes("Detention")) return "Action Required: Review Detention Request Draft";
+                                        if (pendingActivity.title.includes("Document")) return "Action Required: Review Document Request Draft";
+                                        if (pendingActivity.title.includes("Shipper Invoice")) return "Action Required: Review Shipper Invoice Draft";
+
+                                        return `Action Required: Review ${pendingActivity.title.replace('Drafting ', '')}`;
+                                    })()}
+                                </span>
                             </div>
                             <button
                                 onClick={() => onAction?.(shipment.id)}
