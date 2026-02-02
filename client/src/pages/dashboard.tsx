@@ -3,7 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Play, Pause, RotateCcw, Truck, Bot, Mail, FileText, CheckCircle, AlertCircle, Clock, DollarSign, ExternalLink } from "lucide-react";
+import { Play, Pause, RotateCcw, Truck, Bot, Mail, FileText, CheckCircle, AlertCircle, Clock, DollarSign } from "lucide-react";
 import { ActivityStream } from "@/components/activity-stream";
 import { ShipmentTable } from "@/components/shipment-table";
 import { StatusFilters } from "@/components/status-filters";
@@ -551,24 +551,6 @@ export default function Dashboard() {
                     />
                   </CardContent>
                 </Card>
-                
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <FileText className="w-5 h-5 text-primary" />
-                      Documents
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <DocumentLink name="Bill of Lading" url="/demo/documents/01_bill_of_lading.pdf" />
-                    <DocumentLink name="Proof of Delivery" url="/demo/documents/02_proof_of_delivery.pdf" />
-                    <DocumentLink name="Rate Confirmation" url="/demo/documents/03_rate_confirmation.pdf" />
-                    <DocumentLink name="Carrier Invoice" url="/demo/documents/04_carrier_invoice.pdf" />
-                    <DocumentLink name="Detention Docs" url="/demo/documents/05_detention_documentation.pdf" />
-                    <DocumentLink name="Gate Log" url="/demo/documents/08_gate_log.pdf" />
-                    <DocumentLink name="ELD Report" url="/demo/documents/09_eld_report.pdf" />
-                  </CardContent>
-                </Card>
               </div>
             </div>
           </TabsContent>
@@ -619,21 +601,6 @@ export default function Dashboard() {
                       title="Send Invoice to Shipper"
                       description="Email invoice with documentation"
                     />
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <FileText className="w-5 h-5 text-primary" />
-                      Documents
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <DocumentLink name="Lane Contract" url="/demo/documents/06_lane_contract.pdf" />
-                    <DocumentLink name="Broker Invoice" url="/demo/documents/07_broker_invoice.pdf" />
-                    <DocumentLink name="Shipper Agreement" url="/demo/emails/email_04_shipper_broker_arrangement.pdf" />
-                    <DocumentLink name="Invoice Email" url="/demo/emails/email_05_broker_invoice_to_shipper.pdf" />
                   </CardContent>
                 </Card>
               </div>
@@ -690,20 +657,3 @@ function ProcessStep({ icon, title, description }: { icon: React.ReactNode; titl
   );
 }
 
-function DocumentLink({ name, url }: { name: string; url: string }) {
-  return (
-    <a 
-      href={url} 
-      target="_blank" 
-      rel="noopener noreferrer"
-      className="flex items-center justify-between p-2 rounded-lg bg-muted/50 hover-elevate transition-colors group"
-      data-testid={`doc-link-${name.toLowerCase().replace(/\s+/g, '-')}`}
-    >
-      <div className="flex items-center gap-2">
-        <FileText className="w-4 h-4 text-muted-foreground" />
-        <span className="text-sm">{name}</span>
-      </div>
-      <ExternalLink className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-    </a>
-  );
-}
