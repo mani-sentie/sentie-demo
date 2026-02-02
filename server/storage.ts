@@ -1,8 +1,8 @@
 import { type User, type InsertUser } from "@shared/schema";
 import { randomUUID } from "crypto";
 
-// modify the interface with any CRUD methods
-// you might need
+// Storage interface for user management
+// Note: Demo simulation data is handled entirely on the frontend
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
