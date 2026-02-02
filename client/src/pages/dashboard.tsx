@@ -184,8 +184,16 @@ export default function Dashboard() {
   }, [clearTimeouts]);
 
   useEffect(() => {
-    return () => clearTimeouts();
-  }, [clearTimeouts]);
+    // Auto-start demo after a short delay when page loads
+    const autoStartTimer = setTimeout(() => {
+      startSimulation();
+    }, 1000);
+    
+    return () => {
+      clearTimeout(autoStartTimer);
+      clearTimeouts();
+    };
+  }, []);
 
   const apCounts = {
     received: shipments.filter(s => s.apStatus === "received").length,
@@ -225,7 +233,7 @@ export default function Dashboard() {
                 <Bot className="w-6 h-6 text-primary-foreground" />
               </div>
               <div>
-                <h1 className="text-xl font-semibold">FreightAI Agent</h1>
+                <h1 className="text-xl font-semibold">Sentie AI</h1>
                 <p className="text-sm text-muted-foreground">Intelligent Freight Broker Automation</p>
               </div>
             </div>

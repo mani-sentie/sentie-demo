@@ -1,7 +1,7 @@
-# FreightAI Agent Demo
+# Sentie AI Demo
 
 ## Overview
-A web application demonstrating an AI agent for freight brokers that automates accounts payable (AP) and accounts receivable (AR) processes. The demo simulates the complete workflow flow:
+A web application demonstrating Sentie AI - an intelligent agent for freight brokers that automates accounts payable (AP) and accounts receivable (AR) processes. The demo auto-starts when you open the page. The demo simulates the complete workflow flow:
 
 **SHIPPER → FORWARDER/BROKER/3PL → CARRIER**
 
