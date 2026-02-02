@@ -151,7 +151,7 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
         return groups.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
     };
 
-    const groupedActivities = groupActivities(activities.filter(a => !context || a.category === context));
+    const groupedActivities = groupActivities(activities.filter(a => a.shipmentId === shipment.id && (!context || a.category === context)));
 
     // Determine current processing state for UI
     const isShipmentComplete = context === 'ap'
@@ -165,7 +165,7 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
 
     // Extract documents (same as before logic, just helper now)
     const documents = activities
-        .filter(a => a.metadata?.document)
+        .filter(a => a.shipmentId === shipment.id && a.metadata?.document)
         .map(a => ({
             name: a.metadata!.document!.name,
             url: a.metadata!.document!.url,
