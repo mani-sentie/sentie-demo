@@ -9,7 +9,7 @@ import { ShipmentTable } from "@/components/shipment-table";
 import { StatusFilters } from "@/components/status-filters";
 import type { Shipment, Activity, APStatus, ARStatus, SimulationState } from "@shared/schema";
 
-const DEMO_SHIPMENTS: Shipment[] = [
+const INITIAL_SHIPMENTS: Shipment[] = [
   {
     id: "SHP-001",
     shipmentNumber: "FRT-2024-0847",
@@ -33,9 +33,9 @@ const DEMO_SHIPMENTS: Shipment[] = [
     shipper: "GlobalMart Inc",
     laneRate: 1950,
     invoiceAmount: 1950,
-    apStatus: "audit_pass",
-    arStatus: "submitted",
-    createdAt: new Date(Date.now() - 86400000)
+    apStatus: "received",
+    arStatus: "preparing",
+    createdAt: new Date(Date.now() - 1000)
   },
   {
     id: "SHP-003",
@@ -46,182 +46,193 @@ const DEMO_SHIPMENTS: Shipment[] = [
     shipper: "EcoProducts Ltd",
     laneRate: 2200,
     invoiceAmount: 2200,
-    apStatus: "paid",
-    arStatus: "collected",
-    createdAt: new Date(Date.now() - 172800000)
+    apStatus: "received",
+    arStatus: "preparing",
+    createdAt: new Date(Date.now() - 2000)
   }
 ];
 
-const AP_SIMULATION_STEPS = [
+interface SimStep {
+  delay: number;
+  type: "email_received" | "email_sent" | "document_scanned" | "issue_found" | "approval_requested" | "invoice_created" | "audit_complete" | "payment_sent" | "payment_received";
+  title: string;
+  description: string;
+  status: APStatus | ARStatus;
+  document?: { name: string; url: string };
+}
+
+const createAPSteps = (shipment: Shipment): SimStep[] => [
   { 
     delay: 0, 
-    type: "email_received" as const, 
-    title: "Delivery Confirmation Email Received", 
-    description: "Email from Swift Logistics confirming delivery of shipment FRT-2024-0847 to Dallas, TX warehouse", 
+    type: "email_received", 
+    title: `Delivery Confirmation - ${shipment.shipmentNumber}`, 
+    description: `Email from ${shipment.carrier} confirming delivery to ${shipment.destination}`, 
     status: "received" as APStatus,
     document: { name: "Carrier Delivery Email", url: "/demo/emails/email_01_carrier_delivery_complete.pdf" }
   },
   { 
-    delay: 2500, 
-    type: "email_sent" as const, 
-    title: "AI Acknowledges & Requests Documents", 
-    description: "Sentie AI automatically sent acknowledgment to carrier and requested Proof of Delivery, Bill of Lading, and Invoice", 
+    delay: 2000, 
+    type: "email_sent", 
+    title: `AI Requests Documents - ${shipment.shipmentNumber}`, 
+    description: `Sentie AI sent request to ${shipment.carrier} for POD, BOL, and Invoice`, 
     status: "received" as APStatus 
   },
   { 
-    delay: 5000, 
-    type: "email_received" as const, 
-    title: "Invoice & Documents Received from Carrier", 
-    description: "Carrier submitted invoice with attachments: POD, BOL, Rate Con, Invoice with $300 detention charge", 
+    delay: 12000, // 10 second delay for carrier reply
+    type: "email_received", 
+    title: `Documents Received - ${shipment.shipmentNumber}`, 
+    description: `${shipment.carrier} submitted invoice with attachments: POD, BOL, Rate Con, Invoice`, 
     status: "in_review" as APStatus,
     document: { name: "Carrier Invoice Email", url: "/demo/emails/email_02_carrier_invoice_submission.pdf" }
   },
   { 
-    delay: 7500, 
-    type: "document_scanned" as const, 
-    title: "AI Scanning Bill of Lading", 
-    description: "Processing BOL document - verifying shipment details, origin/destination, weight, and commodity information", 
+    delay: 14000, 
+    type: "document_scanned", 
+    title: `Scanning BOL - ${shipment.shipmentNumber}`, 
+    description: `Processing Bill of Lading for ${shipment.origin} to ${shipment.destination}`, 
     status: "in_review" as APStatus,
     document: { name: "Bill of Lading", url: "/demo/documents/01_bill_of_lading.pdf" }
   },
   { 
-    delay: 10000, 
-    type: "document_scanned" as const, 
-    title: "Proof of Delivery Verified", 
-    description: "POD validated - receiver signature confirmed, delivery timestamp: 02/01/2024 14:32 CST, no exceptions noted", 
+    delay: 16000, 
+    type: "document_scanned", 
+    title: `POD Verified - ${shipment.shipmentNumber}`, 
+    description: `Proof of Delivery validated - signature confirmed at ${shipment.destination}`, 
     status: "in_review" as APStatus,
     document: { name: "Proof of Delivery", url: "/demo/documents/02_proof_of_delivery.pdf" }
   },
   { 
-    delay: 12500, 
-    type: "document_scanned" as const, 
-    title: "Rate Confirmation Verified", 
-    description: "Rate Con validated - agreed rate $2,850 matches carrier agreement. Accessorials: lumper $0, detention TBD", 
+    delay: 18000, 
+    type: "document_scanned", 
+    title: `Rate Con Verified - ${shipment.shipmentNumber}`, 
+    description: `Rate confirmation validated - agreed rate $${shipment.laneRate.toLocaleString()}`, 
     status: "in_review" as APStatus,
     document: { name: "Rate Confirmation", url: "/demo/documents/03_rate_confirmation.pdf" }
   },
   { 
-    delay: 15000, 
-    type: "document_scanned" as const, 
-    title: "Carrier Invoice Analysis", 
-    description: "Invoice #INV-78432 for $3,150 detected. Base rate $2,850 + $300 detention charge claimed", 
+    delay: 20000, 
+    type: "document_scanned", 
+    title: `Invoice Analysis - ${shipment.shipmentNumber}`, 
+    description: `Invoice for $${shipment.invoiceAmount.toLocaleString()} detected${shipment.detentionCharge ? ` (includes $${shipment.detentionCharge} detention)` : ''}`, 
     status: "in_review" as APStatus,
     document: { name: "Carrier Invoice", url: "/demo/documents/04_carrier_invoice.pdf" }
   },
-  { 
-    delay: 17500, 
-    type: "issue_found" as const, 
-    title: "Detention Charge Issue Detected", 
-    description: "AI flagged: Carrier claims $300 detention but no supporting documentation (gate log, ELD, timestamps) provided", 
-    status: "in_dispute" as APStatus 
-  },
-  { 
-    delay: 20000, 
-    type: "email_sent" as const, 
-    title: "AI Requests Detention Documentation", 
-    description: "Automated email sent to carrier requesting proof of detention: gate logs, ELD report, and facility timestamps", 
-    status: "in_dispute" as APStatus,
-    document: { name: "Detention Request Email", url: "/demo/emails/email_03_sentie_detention_docs_request.pdf" }
-  },
-  { 
-    delay: 24000, 
-    type: "email_received" as const, 
-    title: "Detention Documentation Received", 
-    description: "Carrier provided detention proof: gate log shows 3.5 hour wait, ELD confirms driver on-site from 08:15 to 11:45", 
-    status: "in_review" as APStatus 
-  },
-  { 
-    delay: 26500, 
-    type: "document_scanned" as const, 
-    title: "Gate Log Verified", 
-    description: "Gate log validated - driver check-in 08:15, dock assignment 11:42, confirms 3hr 27min wait exceeding 2hr free time", 
-    status: "in_review" as APStatus,
-    document: { name: "Gate Log", url: "/demo/documents/08_gate_log.pdf" }
-  },
-  { 
-    delay: 29000, 
-    type: "document_scanned" as const, 
-    title: "ELD Report Verified", 
-    description: "ELD data confirms: truck arrived 08:12, stationary at facility until 11:48, supports detention claim", 
-    status: "in_review" as APStatus,
-    document: { name: "ELD Report", url: "/demo/documents/09_eld_report.pdf" }
-  },
-  { 
-    delay: 31500, 
-    type: "document_scanned" as const, 
-    title: "Detention Documentation Approved", 
-    description: "Detention charge of $300 validated - 1.5 hours billable at $200/hr rate per rate confirmation terms", 
-    status: "in_review" as APStatus,
-    document: { name: "Detention Documentation", url: "/demo/documents/05_detention_documentation.pdf" }
-  },
-  { 
-    delay: 34000, 
-    type: "audit_complete" as const, 
-    title: "AP Audit Complete", 
-    description: "All documents verified. Invoice $3,150 approved for payment. Carrier rate $2,850 + $300 valid detention.", 
-    status: "audit_pass" as APStatus 
-  },
+  ...(shipment.detentionCharge ? [
+    { 
+      delay: 22000, 
+      type: "issue_found" as const, 
+      title: `Detention Issue - ${shipment.shipmentNumber}`, 
+      description: `Carrier claims $${shipment.detentionCharge} detention but no supporting documentation provided`, 
+      status: "in_dispute" as APStatus 
+    },
+    { 
+      delay: 24000, 
+      type: "email_sent" as const, 
+      title: `Requesting Detention Proof - ${shipment.shipmentNumber}`, 
+      description: `Sentie AI emailed ${shipment.carrier} requesting gate logs and ELD report`, 
+      status: "in_dispute" as APStatus,
+      document: { name: "Detention Request Email", url: "/demo/emails/email_03_sentie_detention_docs_request.pdf" }
+    },
+    { 
+      delay: 34000, // 10 second delay for carrier reply
+      type: "email_received" as const, 
+      title: `Detention Docs Received - ${shipment.shipmentNumber}`, 
+      description: `${shipment.carrier} provided gate log and ELD report for detention claim`, 
+      status: "in_review" as APStatus 
+    },
+    { 
+      delay: 36000, 
+      type: "document_scanned" as const, 
+      title: `Gate Log Verified - ${shipment.shipmentNumber}`, 
+      description: `Gate log confirms wait time exceeding free time allowance`, 
+      status: "in_review" as APStatus,
+      document: { name: "Gate Log", url: "/demo/documents/08_gate_log.pdf" }
+    },
+    { 
+      delay: 38000, 
+      type: "document_scanned" as const, 
+      title: `ELD Report Verified - ${shipment.shipmentNumber}`, 
+      description: `ELD data confirms truck stationary at facility, supports detention claim`, 
+      status: "in_review" as APStatus,
+      document: { name: "ELD Report", url: "/demo/documents/09_eld_report.pdf" }
+    },
+    { 
+      delay: 40000, 
+      type: "audit_complete" as const, 
+      title: `AP Audit Complete - ${shipment.shipmentNumber}`, 
+      description: `All documents verified. Invoice $${shipment.invoiceAmount.toLocaleString()} approved for payment.`, 
+      status: "audit_pass" as APStatus 
+    },
+  ] : [
+    { 
+      delay: 22000, 
+      type: "audit_complete" as const, 
+      title: `AP Audit Complete - ${shipment.shipmentNumber}`, 
+      description: `All documents verified. Invoice $${shipment.invoiceAmount.toLocaleString()} approved for payment.`, 
+      status: "audit_pass" as APStatus 
+    },
+  ])
 ];
 
-const AR_SIMULATION_STEPS = [
+const createARSteps = (shipment: Shipment): SimStep[] => [
   { 
     delay: 0, 
-    type: "email_received" as const, 
-    title: "AR Job Opened", 
-    description: "Initiating accounts receivable process for shipment FRT-2024-0847. Reviewing shipper communication history.", 
+    type: "email_received", 
+    title: `AR Job Opened - ${shipment.shipmentNumber}`, 
+    description: `Initiating accounts receivable process for shipment to ${shipment.shipper}`, 
     status: "preparing" as ARStatus 
   },
   { 
-    delay: 2500, 
-    type: "document_scanned" as const, 
-    title: "Reviewing Shipper-Broker Agreement", 
-    description: "Found email thread confirming shipment booking. TechCorp Industries agreed to lane rate plus accessorials.", 
+    delay: 2000, 
+    type: "document_scanned", 
+    title: `Reviewing Agreement - ${shipment.shipmentNumber}`, 
+    description: `Scanning shipper agreement with ${shipment.shipper}`, 
     status: "preparing" as ARStatus,
-    document: { name: "Shipper Agreement Email", url: "/demo/emails/email_04_shipper_broker_arrangement.pdf" }
+    document: { name: "Shipper Agreement", url: "/demo/emails/email_04_shipper_broker_arrangement.pdf" }
   },
   { 
-    delay: 5000, 
-    type: "document_scanned" as const, 
-    title: "Lane Contract Verified", 
-    description: "Lane contract confirms rate of $3,450 for LA to Dallas. Detention clause: shipper responsible for delays at destination.", 
+    delay: 4000, 
+    type: "document_scanned", 
+    title: `Lane Contract Verified - ${shipment.shipmentNumber}`, 
+    description: `Lane contract confirms rate for ${shipment.origin} to ${shipment.destination}`, 
     status: "preparing" as ARStatus,
     document: { name: "Lane Contract", url: "/demo/documents/06_lane_contract.pdf" }
   },
   { 
-    delay: 7500, 
-    type: "invoice_created" as const, 
-    title: "Invoice Generated", 
-    description: "Created invoice #BRK-2024-0847 for $3,750 - Lane rate $3,450 + $300 detention (shipper facility delay)", 
+    delay: 6000, 
+    type: "invoice_created", 
+    title: `Invoice Generated - ${shipment.shipmentNumber}`, 
+    description: `Created broker invoice for ${shipment.shipper}${shipment.detentionCharge ? ` including $${shipment.detentionCharge} detention` : ''}`, 
     status: "preparing" as ARStatus,
     document: { name: "Broker Invoice", url: "/demo/documents/07_broker_invoice.pdf" }
   },
   { 
+    delay: 8000, 
+    type: "document_scanned", 
+    title: `Evidence Packet Ready - ${shipment.shipmentNumber}`, 
+    description: `Compiled POD, delivery confirmation, and supporting documentation`, 
+    status: "for_review" as ARStatus 
+  },
+  { 
     delay: 10000, 
-    type: "document_scanned" as const, 
-    title: "Evidence Packet Assembled", 
-    description: "Compiled supporting documents: POD, gate log, ELD report proving shipper facility caused 3.5hr detention", 
+    type: "approval_requested", 
+    title: `Approval Requested - ${shipment.shipmentNumber}`, 
+    description: `Invoice ready for human review before sending to ${shipment.shipper}`, 
     status: "for_review" as ARStatus 
   },
   { 
-    delay: 12500, 
-    type: "approval_requested" as const, 
-    title: "Human Approval Requested", 
-    description: "Invoice #BRK-2024-0847 and evidence packet ready for review. Awaiting approval to send to TechCorp Industries.", 
-    status: "for_review" as ARStatus 
-  },
-  { 
-    delay: 17000, 
-    type: "email_sent" as const, 
-    title: "Invoice Sent to Shipper", 
-    description: "Invoice emailed to TechCorp Industries with attached POD, detention documentation, and payment terms (Net 30)", 
+    delay: 15000, 
+    type: "email_sent", 
+    title: `Invoice Sent - ${shipment.shipmentNumber}`, 
+    description: `Invoice emailed to ${shipment.shipper} with attached documentation`, 
     status: "submitted" as ARStatus,
     document: { name: "Invoice Email", url: "/demo/emails/email_05_broker_invoice_to_shipper.pdf" }
   },
   { 
-    delay: 19500, 
-    type: "payment_received" as const, 
-    title: "AR Complete", 
-    description: "Invoice submitted successfully. Payment tracking initiated. Expected collection: Net 30 terms.", 
+    delay: 17000, 
+    type: "payment_received", 
+    title: `AR Complete - ${shipment.shipmentNumber}`, 
+    description: `Invoice submitted to ${shipment.shipper}. Payment tracking initiated.`, 
     status: "submitted" as ARStatus 
   },
 ];
@@ -234,9 +245,10 @@ export default function Dashboard() {
     currentStep: 0
   });
   const [activities, setActivities] = useState<Activity[]>([]);
-  const [shipments, setShipments] = useState<Shipment[]>(DEMO_SHIPMENTS);
+  const [shipments, setShipments] = useState<Shipment[]>(INITIAL_SHIPMENTS);
   const [apFilter, setApFilter] = useState<APStatus | "all">("all");
   const [arFilter, setArFilter] = useState<ARStatus | "all">("all");
+  const [completedAPShipments, setCompletedAPShipments] = useState<Set<string>>(new Set());
   const timeoutRefs = useRef<NodeJS.Timeout[]>([]);
   const hasAutoStarted = useRef(false);
 
@@ -245,50 +257,14 @@ export default function Dashboard() {
     timeoutRefs.current = [];
   }, []);
 
-  const runAPSimulation = useCallback(() => {
-    setSimulation(prev => ({ ...prev, currentPhase: "ap", currentStep: 0 }));
-    setActiveTab("ap");
+  const runARForShipment = useCallback((shipment: Shipment, baseDelay: number = 0) => {
+    const arSteps = createARSteps(shipment);
     
-    AP_SIMULATION_STEPS.forEach((step, index) => {
+    arSteps.forEach((step, index) => {
       const timeout = setTimeout(() => {
         const newActivity: Activity = {
-          id: `ap-${Date.now()}-${index}`,
-          shipmentId: "SHP-001",
-          type: step.type,
-          category: "ap",
-          title: step.title,
-          description: step.description,
-          timestamp: new Date(),
-          metadata: step.document ? { document: step.document } : undefined
-        };
-        
-        setActivities(prev => [newActivity, ...prev]);
-        setSimulation(prev => ({ ...prev, currentStep: index + 1 }));
-        
-        setShipments(prev => prev.map(s => 
-          s.id === "SHP-001" ? { ...s, apStatus: step.status } : s
-        ));
-        
-        if (index === AP_SIMULATION_STEPS.length - 1) {
-          setTimeout(() => {
-            runARSimulation();
-          }, 2000);
-        }
-      }, step.delay);
-      
-      timeoutRefs.current.push(timeout);
-    });
-  }, []);
-
-  const runARSimulation = useCallback(() => {
-    setSimulation(prev => ({ ...prev, currentPhase: "ar", currentStep: 0 }));
-    setActiveTab("ar");
-    
-    AR_SIMULATION_STEPS.forEach((step, index) => {
-      const timeout = setTimeout(() => {
-        const newActivity: Activity = {
-          id: `ar-${Date.now()}-${index}`,
-          shipmentId: "SHP-001",
+          id: `ar-${shipment.id}-${Date.now()}-${index}`,
+          shipmentId: shipment.id,
           type: step.type,
           category: "ar",
           title: step.title,
@@ -298,28 +274,79 @@ export default function Dashboard() {
         };
         
         setActivities(prev => [newActivity, ...prev]);
-        setSimulation(prev => ({ ...prev, currentStep: index + 1 }));
         
         setShipments(prev => prev.map(s => 
-          s.id === "SHP-001" ? { ...s, arStatus: step.status } : s
+          s.id === shipment.id ? { ...s, arStatus: step.status as ARStatus } : s
         ));
-        
-        if (index === AR_SIMULATION_STEPS.length - 1) {
-          setSimulation(prev => ({ ...prev, isRunning: false, currentPhase: "complete" }));
-        }
-      }, step.delay);
+      }, baseDelay + step.delay);
       
       timeoutRefs.current.push(timeout);
     });
   }, []);
 
+  const runAPForShipment = useCallback((shipment: Shipment, baseDelay: number = 0) => {
+    const apSteps = createAPSteps(shipment);
+    
+    apSteps.forEach((step, index) => {
+      const timeout = setTimeout(() => {
+        const newActivity: Activity = {
+          id: `ap-${shipment.id}-${Date.now()}-${index}`,
+          shipmentId: shipment.id,
+          type: step.type,
+          category: "ap",
+          title: step.title,
+          description: step.description,
+          timestamp: new Date(),
+          metadata: step.document ? { document: step.document } : undefined
+        };
+        
+        setActivities(prev => [newActivity, ...prev]);
+        
+        setShipments(prev => prev.map(s => 
+          s.id === shipment.id ? { ...s, apStatus: step.status as APStatus } : s
+        ));
+        
+        // When AP audit is complete for this shipment, start AR
+        if (step.type === "audit_complete") {
+          setCompletedAPShipments(prev => new Set(Array.from(prev).concat(shipment.id)));
+          // Start AR for this shipment after a brief pause
+          setTimeout(() => {
+            runARForShipment(shipment, 0);
+          }, 2000);
+        }
+      }, baseDelay + step.delay);
+      
+      timeoutRefs.current.push(timeout);
+    });
+  }, [runARForShipment]);
+
   const startSimulation = useCallback(() => {
     clearTimeouts();
     setActivities([]);
-    setShipments(DEMO_SHIPMENTS);
+    setShipments(INITIAL_SHIPMENTS);
+    setCompletedAPShipments(new Set());
     setSimulation({ isRunning: true, currentPhase: "ap", currentStep: 0 });
-    runAPSimulation();
-  }, [clearTimeouts, runAPSimulation]);
+    
+    // Run all shipments in parallel with staggered starts
+    INITIAL_SHIPMENTS.forEach((shipment, index) => {
+      // Stagger each shipment by 3 seconds
+      runAPForShipment(shipment, index * 3000);
+    });
+    
+    // Update phase to show AR when first shipment starts AR
+    const checkARTimeout = setTimeout(() => {
+      setSimulation(prev => ({ ...prev, currentPhase: "ar" }));
+    }, 45000); // Approximate time for first AP to complete
+    
+    timeoutRefs.current.push(checkARTimeout);
+    
+    // Mark simulation complete after all shipments finish
+    const completeTimeout = setTimeout(() => {
+      setSimulation(prev => ({ ...prev, isRunning: false, currentPhase: "complete" }));
+    }, 75000);
+    
+    timeoutRefs.current.push(completeTimeout);
+  }, [clearTimeouts, runAPForShipment]);
 
   const pauseSimulation = useCallback(() => {
     clearTimeouts();
@@ -329,7 +356,8 @@ export default function Dashboard() {
   const resetSimulation = useCallback(() => {
     clearTimeouts();
     setActivities([]);
-    setShipments(DEMO_SHIPMENTS);
+    setShipments(INITIAL_SHIPMENTS);
+    setCompletedAPShipments(new Set());
     setSimulation({ isRunning: false, currentPhase: "idle", currentStep: 0 });
     setApFilter("all");
     setArFilter("all");
@@ -399,7 +427,7 @@ export default function Dashboard() {
                 <span className="text-sm font-medium">
                   {simulation.currentPhase === "idle" ? "Ready" :
                    simulation.currentPhase === "complete" ? "Complete" :
-                   simulation.isRunning ? `Running ${simulation.currentPhase.toUpperCase()}` : "Paused"}
+                   simulation.isRunning ? `Processing ${shipments.length} Shipments` : "Paused"}
                 </span>
               </div>
               
@@ -446,7 +474,7 @@ export default function Dashboard() {
                 </div>
                 <div className="ml-auto flex items-center gap-2 text-sm text-muted-foreground">
                   <Mail className="w-4 h-4" />
-                  <span>AI monitors all email communications</span>
+                  <span>Processing {shipments.length} shipments in parallel</span>
                 </div>
               </div>
             </CardContent>
@@ -483,6 +511,7 @@ export default function Dashboard() {
                     <CardTitle className="flex items-center gap-2 text-lg">
                       <Clock className="w-5 h-5 text-primary" />
                       AP Activity Stream
+                      <Badge variant="outline" className="ml-2">Live</Badge>
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -497,32 +526,28 @@ export default function Dashboard() {
               <div className="space-y-4">
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-lg">AP Process Overview</CardTitle>
+                    <CardTitle className="text-lg">AP Process Flow</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <ProcessStep 
                       icon={<Mail className="w-4 h-4" />}
-                      title="Receive Delivery Confirmation"
-                      active={simulation.currentPhase === "ap" && simulation.currentStep >= 1 && simulation.currentStep <= 2}
-                      complete={simulation.currentPhase === "ap" && simulation.currentStep > 2 || simulation.currentPhase === "ar" || simulation.currentPhase === "complete"}
+                      title="Receive & Request Docs"
+                      description="Get delivery confirmation, request POD/BOL"
                     />
                     <ProcessStep 
                       icon={<FileText className="w-4 h-4" />}
                       title="Scan & Verify Documents"
-                      active={simulation.currentPhase === "ap" && simulation.currentStep >= 3 && simulation.currentStep <= 7}
-                      complete={simulation.currentPhase === "ap" && simulation.currentStep > 7 || simulation.currentPhase === "ar" || simulation.currentPhase === "complete"}
+                      description="AI processes all submitted documents"
                     />
                     <ProcessStep 
                       icon={<AlertCircle className="w-4 h-4" />}
-                      title="Dispute & Request Proof"
-                      active={simulation.currentPhase === "ap" && simulation.currentStep >= 8 && simulation.currentStep <= 10}
-                      complete={simulation.currentPhase === "ap" && simulation.currentStep > 10 || simulation.currentPhase === "ar" || simulation.currentPhase === "complete"}
+                      title="Dispute Invalid Charges"
+                      description="Request proof for unsubstantiated claims"
                     />
                     <ProcessStep 
                       icon={<CheckCircle className="w-4 h-4" />}
-                      title="Verify & Complete Audit"
-                      active={simulation.currentPhase === "ap" && simulation.currentStep >= 11}
-                      complete={simulation.currentPhase === "ar" || simulation.currentPhase === "complete"}
+                      title="Complete Audit"
+                      description="Approve invoice for payment"
                     />
                   </CardContent>
                 </Card>
@@ -556,12 +581,13 @@ export default function Dashboard() {
                     <CardTitle className="flex items-center gap-2 text-lg">
                       <Clock className="w-5 h-5 text-primary" />
                       AR Activity Stream
+                      <Badge variant="outline" className="ml-2">Live</Badge>
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <ActivityStream 
                       activities={arActivities}
-                      emptyMessage="AR process starts after AP audit is complete"
+                      emptyMessage="AR process starts after each shipment's AP audit is complete"
                     />
                   </CardContent>
                 </Card>
@@ -570,32 +596,28 @@ export default function Dashboard() {
               <div className="space-y-4">
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-lg">AR Process Overview</CardTitle>
+                    <CardTitle className="text-lg">AR Process Flow</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <ProcessStep 
                       icon={<FileText className="w-4 h-4" />}
                       title="Review Shipper Agreement"
-                      active={simulation.currentPhase === "ar" && simulation.currentStep >= 1 && simulation.currentStep <= 3}
-                      complete={simulation.currentPhase === "ar" && simulation.currentStep > 3 || simulation.currentPhase === "complete"}
+                      description="Verify lane rates and terms"
                     />
                     <ProcessStep 
                       icon={<DollarSign className="w-4 h-4" />}
                       title="Generate Invoice"
-                      active={simulation.currentPhase === "ar" && simulation.currentStep >= 4 && simulation.currentStep <= 5}
-                      complete={simulation.currentPhase === "ar" && simulation.currentStep > 5 || simulation.currentPhase === "complete"}
+                      description="Create invoice with all charges"
                     />
                     <ProcessStep 
                       icon={<CheckCircle className="w-4 h-4" />}
                       title="Request Human Approval"
-                      active={simulation.currentPhase === "ar" && simulation.currentStep >= 6 && simulation.currentStep <= 6}
-                      complete={simulation.currentPhase === "ar" && simulation.currentStep > 6 || simulation.currentPhase === "complete"}
+                      description="Queue for review before sending"
                     />
                     <ProcessStep 
                       icon={<Mail className="w-4 h-4" />}
                       title="Send Invoice to Shipper"
-                      active={simulation.currentPhase === "ar" && simulation.currentStep >= 7}
-                      complete={simulation.currentPhase === "complete"}
+                      description="Email invoice with documentation"
                     />
                   </CardContent>
                 </Card>
@@ -626,6 +648,9 @@ export default function Dashboard() {
                 <CardTitle className="flex items-center gap-2">
                   <Truck className="w-5 h-5 text-primary" />
                   Shipments
+                  <Badge variant="outline" className="ml-2">
+                    {completedAPShipments.size}/{shipments.length} AP Complete
+                  </Badge>
                 </CardTitle>
                 <StatusFilters
                   activeTab={activeTab}
@@ -651,21 +676,16 @@ export default function Dashboard() {
   );
 }
 
-function ProcessStep({ icon, title, active, complete }: { icon: React.ReactNode; title: string; active: boolean; complete: boolean }) {
+function ProcessStep({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
   return (
-    <div className={`flex items-center gap-3 p-2 rounded-lg transition-colors ${
-      active ? 'bg-primary/10 border border-primary/30' : 
-      complete ? 'bg-chart-2/10' : 'bg-muted/50'
-    }`}>
-      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-        active ? 'bg-primary text-primary-foreground' :
-        complete ? 'bg-chart-2 text-white' : 'bg-muted text-muted-foreground'
-      }`}>
-        {complete ? <CheckCircle className="w-4 h-4" /> : icon}
+    <div className="flex items-start gap-3 p-2 rounded-lg bg-muted/50">
+      <div className="w-8 h-8 rounded-full flex items-center justify-center bg-primary/10 text-primary shrink-0">
+        {icon}
       </div>
-      <span className={`text-sm font-medium ${active ? 'text-primary' : complete ? 'text-chart-2' : 'text-muted-foreground'}`}>
-        {title}
-      </span>
+      <div className="min-w-0">
+        <span className="text-sm font-medium block">{title}</span>
+        <span className="text-xs text-muted-foreground">{description}</span>
+      </div>
     </div>
   );
 }
