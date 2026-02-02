@@ -30,6 +30,7 @@ export function log(message: string, source = "express") {
     hour12: true,
   });
 
+
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
@@ -94,7 +95,6 @@ app.use((req, res, next) => {
     {
       port,
       host: "0.0.0.0",
-      reusePort: true,
     },
     () => {
       log(`serving on port ${port}`);

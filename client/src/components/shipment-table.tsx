@@ -5,6 +5,7 @@ import type { Shipment, APStatus, ARStatus } from "@shared/schema";
 interface ShipmentTableProps {
   shipments: Shipment[];
   activeTab: "ap" | "ar";
+  onShipmentClick?: (shipment: Shipment) => void;
 }
 
 const apStatusConfig: Record<APStatus, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -23,7 +24,7 @@ const arStatusConfig: Record<ARStatus, { label: string; variant: "default" | "se
   collected: { label: "Collected", variant: "default" }
 };
 
-export function ShipmentTable({ shipments, activeTab }: ShipmentTableProps) {
+export function ShipmentTable({ shipments, activeTab, onShipmentClick }: ShipmentTableProps) {
   if (shipments.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -48,14 +49,16 @@ export function ShipmentTable({ shipments, activeTab }: ShipmentTableProps) {
         </TableHeader>
         <TableBody>
           {shipments.map((shipment) => {
-            const statusConfig = activeTab === "ap" 
+            const statusConfig = activeTab === "ap"
               ? apStatusConfig[shipment.apStatus]
               : arStatusConfig[shipment.arStatus];
-            
+
             return (
-              <TableRow 
+              <TableRow
                 key={shipment.id}
                 data-testid={`shipment-row-${shipment.id}`}
+                className={onShipmentClick ? "cursor-pointer hover:bg-muted/50" : ""}
+                onClick={() => onShipmentClick?.(shipment)}
               >
                 <TableCell className="font-medium">{shipment.shipmentNumber}</TableCell>
                 <TableCell>

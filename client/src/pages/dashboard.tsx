@@ -62,180 +62,182 @@ interface SimStep {
 }
 
 const createAPSteps = (shipment: Shipment): SimStep[] => [
-  { 
-    delay: 0, 
-    type: "email_received", 
-    title: `Delivery Confirmation - ${shipment.shipmentNumber}`, 
-    description: `Email from ${shipment.carrier} confirming delivery to ${shipment.destination}`, 
+  {
+    delay: 0,
+    type: "email_received",
+    title: `Delivery Confirmation - ${shipment.shipmentNumber}`,
+    description: `Email from ${shipment.carrier} confirming delivery to ${shipment.destination}`,
     status: "received" as APStatus,
     document: { name: "Carrier Delivery Email", url: "/demo/emails/email_01_carrier_delivery_complete.pdf" }
   },
-  { 
-    delay: 2000, 
-    type: "email_sent", 
-    title: `AI Requests Documents - ${shipment.shipmentNumber}`, 
-    description: `Sentie AI sent request to ${shipment.carrier} for POD, BOL, and Invoice`, 
-    status: "received" as APStatus 
+  {
+    delay: 5000,
+    type: "email_sent",
+    title: `AI Requests Documents - ${shipment.shipmentNumber}`,
+    description: `Sentie AI sent request to ${shipment.carrier} for POD, BOL, and Invoice`,
+    status: "received" as APStatus
   },
-  { 
-    delay: 12000, // 10 second delay for carrier reply
-    type: "email_received", 
-    title: `Documents Received - ${shipment.shipmentNumber}`, 
-    description: `${shipment.carrier} submitted invoice with attachments: POD, BOL, Rate Con, Invoice`, 
+  {
+    delay: 15000, // 10 second delay for carrier reply
+    type: "email_received",
+    title: `Documents Received - ${shipment.shipmentNumber}`,
+    description: `${shipment.carrier} submitted invoice with attachments: POD, BOL, Rate Con, Invoice`,
     status: "in_review" as APStatus,
     document: { name: "Carrier Invoice Email", url: "/demo/emails/email_02_carrier_invoice_submission.pdf" }
   },
-  { 
-    delay: 14000, 
-    type: "document_scanned", 
-    title: `Scanning BOL - ${shipment.shipmentNumber}`, 
-    description: `Processing Bill of Lading for ${shipment.origin} to ${shipment.destination}`, 
+  {
+    delay: 20000,
+    type: "document_scanned",
+    title: `Scanning BOL - ${shipment.shipmentNumber}`,
+    description: `Processing Bill of Lading for ${shipment.origin} to ${shipment.destination}`,
     status: "in_review" as APStatus,
     document: { name: "Bill of Lading", url: "/demo/documents/01_bill_of_lading.pdf" }
   },
-  { 
-    delay: 16000, 
-    type: "document_scanned", 
-    title: `POD Verified - ${shipment.shipmentNumber}`, 
-    description: `Proof of Delivery validated - signature confirmed at ${shipment.destination}`, 
+  {
+    delay: 25000,
+    type: "document_scanned",
+    title: `POD Verified - ${shipment.shipmentNumber}`,
+    description: `Proof of Delivery validated - signature confirmed at ${shipment.destination}`,
     status: "in_review" as APStatus,
     document: { name: "Proof of Delivery", url: "/demo/documents/02_proof_of_delivery.pdf" }
   },
-  { 
-    delay: 18000, 
-    type: "document_scanned", 
-    title: `Rate Con Verified - ${shipment.shipmentNumber}`, 
-    description: `Rate confirmation validated - agreed rate $${shipment.laneRate.toLocaleString()}`, 
+  {
+    delay: 30000,
+    type: "document_scanned",
+    title: `Rate Con Verified - ${shipment.shipmentNumber}`,
+    description: `Rate confirmation validated - agreed rate $${shipment.laneRate.toLocaleString()}`,
     status: "in_review" as APStatus,
     document: { name: "Rate Confirmation", url: "/demo/documents/03_rate_confirmation.pdf" }
   },
-  { 
-    delay: 20000, 
-    type: "document_scanned", 
-    title: `Invoice Analysis - ${shipment.shipmentNumber}`, 
-    description: `Invoice for $${shipment.invoiceAmount.toLocaleString()} detected${shipment.detentionCharge ? ` (includes $${shipment.detentionCharge} detention)` : ''}`, 
+  {
+    delay: 35000,
+    type: "document_scanned",
+    title: `Invoice Analysis - ${shipment.shipmentNumber}`,
+    description: `Invoice for $${shipment.invoiceAmount.toLocaleString()} detected${shipment.detentionCharge ? ` (includes $${shipment.detentionCharge} detention)` : ''}`,
     status: "in_review" as APStatus,
     document: { name: "Carrier Invoice", url: "/demo/documents/04_carrier_invoice.pdf" }
   },
   ...(shipment.detentionCharge ? [
-    { 
-      delay: 22000, 
-      type: "issue_found" as const, 
-      title: `Detention Issue - ${shipment.shipmentNumber}`, 
-      description: `Carrier claims $${shipment.detentionCharge} detention but no supporting documentation provided`, 
-      status: "in_dispute" as APStatus 
+    {
+      delay: 40000,
+      type: "issue_found" as const,
+      title: `Detention Issue - ${shipment.shipmentNumber}`,
+      description: `Carrier claims $${shipment.detentionCharge} detention but no supporting documentation provided`,
+      status: "in_dispute" as APStatus
     },
-    { 
-      delay: 24000, 
-      type: "email_sent" as const, 
-      title: `Requesting Detention Proof - ${shipment.shipmentNumber}`, 
-      description: `Sentie AI emailed ${shipment.carrier} requesting gate logs and ELD report`, 
+    {
+      delay: 45000,
+      type: "email_sent" as const,
+      title: `Requesting Detention Proof - ${shipment.shipmentNumber}`,
+      description: `Sentie AI emailed ${shipment.carrier} requesting gate logs and ELD report`,
       status: "in_dispute" as APStatus,
       document: { name: "Detention Request Email", url: "/demo/emails/email_03_sentie_detention_docs_request.pdf" }
     },
-    { 
-      delay: 34000, // 10 second delay for carrier reply
-      type: "email_received" as const, 
-      title: `Detention Docs Received - ${shipment.shipmentNumber}`, 
-      description: `${shipment.carrier} provided gate log and ELD report for detention claim`, 
-      status: "in_review" as APStatus 
+    {
+      delay: 55000, // 10 second delay for carrier reply
+      type: "email_received" as const,
+      title: `Detention Docs Received - ${shipment.shipmentNumber}`,
+      description: `${shipment.carrier} provided gate log and ELD report for detention claim`,
+      status: "in_review" as APStatus
     },
-    { 
-      delay: 36000, 
-      type: "document_scanned" as const, 
-      title: `Gate Log Verified - ${shipment.shipmentNumber}`, 
-      description: `Gate log confirms wait time exceeding free time allowance`, 
+    {
+      delay: 60000,
+      type: "document_scanned" as const,
+      title: `Gate Log Verified - ${shipment.shipmentNumber}`,
+      description: `Gate log confirms wait time exceeding free time allowance`,
       status: "in_review" as APStatus,
       document: { name: "Gate Log", url: "/demo/documents/08_gate_log.pdf" }
     },
-    { 
-      delay: 38000, 
-      type: "document_scanned" as const, 
-      title: `ELD Report Verified - ${shipment.shipmentNumber}`, 
-      description: `ELD data confirms truck stationary at facility, supports detention claim`, 
+    {
+      delay: 65000,
+      type: "document_scanned" as const,
+      title: `ELD Report Verified - ${shipment.shipmentNumber}`,
+      description: `ELD data confirms truck stationary at facility, supports detention claim`,
       status: "in_review" as APStatus,
       document: { name: "ELD Report", url: "/demo/documents/09_eld_report.pdf" }
     },
-    { 
-      delay: 40000, 
-      type: "audit_complete" as const, 
-      title: `AP Audit Complete - ${shipment.shipmentNumber}`, 
-      description: `All documents verified. Invoice $${shipment.invoiceAmount.toLocaleString()} approved for payment.`, 
-      status: "audit_pass" as APStatus 
+    {
+      delay: 70000,
+      type: "audit_complete" as const,
+      title: `AP Audit Complete - ${shipment.shipmentNumber}`,
+      description: `All documents verified. Invoice $${shipment.invoiceAmount.toLocaleString()} approved for payment.`,
+      status: "audit_pass" as APStatus
     },
   ] : [
-    { 
-      delay: 22000, 
-      type: "audit_complete" as const, 
-      title: `AP Audit Complete - ${shipment.shipmentNumber}`, 
-      description: `All documents verified. Invoice $${shipment.invoiceAmount.toLocaleString()} approved for payment.`, 
-      status: "audit_pass" as APStatus 
+    {
+      delay: 40000,
+      type: "audit_complete" as const,
+      title: `AP Audit Complete - ${shipment.shipmentNumber}`,
+      description: `All documents verified. Invoice $${shipment.invoiceAmount.toLocaleString()} approved for payment.`,
+      status: "audit_pass" as APStatus
     },
   ])
 ];
 
 const createARSteps = (shipment: Shipment): SimStep[] => [
-  { 
-    delay: 0, 
-    type: "email_received", 
-    title: `AR Job Opened - ${shipment.shipmentNumber}`, 
-    description: `Initiating accounts receivable process for shipment to ${shipment.shipper}`, 
-    status: "preparing" as ARStatus 
+  {
+    delay: 0,
+    type: "email_received",
+    title: `AR Job Opened - ${shipment.shipmentNumber}`,
+    description: `Initiating accounts receivable process for shipment to ${shipment.shipper}`,
+    status: "preparing" as ARStatus
   },
-  { 
-    delay: 2000, 
-    type: "document_scanned", 
-    title: `Reviewing Agreement - ${shipment.shipmentNumber}`, 
-    description: `Scanning shipper agreement with ${shipment.shipper}`, 
+  {
+    delay: 5000,
+    type: "document_scanned",
+    title: `Reviewing Agreement - ${shipment.shipmentNumber}`,
+    description: `Scanning shipper agreement with ${shipment.shipper}`,
     status: "preparing" as ARStatus,
     document: { name: "Shipper Agreement", url: "/demo/emails/email_04_shipper_broker_arrangement.pdf" }
   },
-  { 
-    delay: 4000, 
-    type: "document_scanned", 
-    title: `Lane Contract Verified - ${shipment.shipmentNumber}`, 
-    description: `Lane contract confirms rate for ${shipment.origin} to ${shipment.destination}`, 
+  {
+    delay: 10000,
+    type: "document_scanned",
+    title: `Lane Contract Verified - ${shipment.shipmentNumber}`,
+    description: `Lane contract confirms rate for ${shipment.origin} to ${shipment.destination}`,
     status: "preparing" as ARStatus,
     document: { name: "Lane Contract", url: "/demo/documents/06_lane_contract.pdf" }
   },
-  { 
-    delay: 6000, 
-    type: "invoice_created", 
-    title: `Invoice Generated - ${shipment.shipmentNumber}`, 
-    description: `Created broker invoice for ${shipment.shipper}${shipment.detentionCharge ? ` including $${shipment.detentionCharge} detention` : ''}`, 
+  {
+    delay: 15000,
+    type: "invoice_created",
+    title: `Invoice Generated - ${shipment.shipmentNumber}`,
+    description: `Created broker invoice for ${shipment.shipper}${shipment.detentionCharge ? ` including $${shipment.detentionCharge} detention` : ''}`,
     status: "preparing" as ARStatus,
     document: { name: "Broker Invoice", url: "/demo/documents/07_broker_invoice.pdf" }
   },
-  { 
-    delay: 8000, 
-    type: "document_scanned", 
-    title: `Evidence Packet Ready - ${shipment.shipmentNumber}`, 
-    description: `Compiled POD, delivery confirmation, and supporting documentation`, 
-    status: "for_review" as ARStatus 
+  {
+    delay: 20000,
+    type: "document_scanned",
+    title: `Evidence Packet Ready - ${shipment.shipmentNumber}`,
+    description: `Compiled POD, delivery confirmation, and supporting documentation`,
+    status: "for_review" as ARStatus
   },
-  { 
-    delay: 10000, 
-    type: "approval_requested", 
-    title: `Approval Requested - ${shipment.shipmentNumber}`, 
-    description: `Invoice ready for human review before sending to ${shipment.shipper}`, 
-    status: "for_review" as ARStatus 
+  {
+    delay: 25000,
+    type: "approval_requested",
+    title: `Approval Requested - ${shipment.shipmentNumber}`,
+    description: `Invoice ready for human review before sending to ${shipment.shipper}`,
+    status: "for_review" as ARStatus
   },
-  { 
-    delay: 15000, 
-    type: "email_sent", 
-    title: `Invoice Sent - ${shipment.shipmentNumber}`, 
-    description: `Invoice emailed to ${shipment.shipper} with attached documentation`, 
+  {
+    delay: 30000,
+    type: "email_sent",
+    title: `Invoice Sent - ${shipment.shipmentNumber}`,
+    description: `Invoice emailed to ${shipment.shipper} with attached documentation`,
     status: "submitted" as ARStatus,
     document: { name: "Invoice Email", url: "/demo/emails/email_05_broker_invoice_to_shipper.pdf" }
   },
-  { 
-    delay: 17000, 
-    type: "payment_received", 
-    title: `AR Complete - ${shipment.shipmentNumber}`, 
-    description: `Invoice submitted to ${shipment.shipper}. Payment tracking initiated.`, 
-    status: "submitted" as ARStatus 
+  {
+    delay: 35000,
+    type: "payment_received",
+    title: `AR Complete - ${shipment.shipmentNumber}`,
+    description: `Invoice submitted to ${shipment.shipper}. Payment tracking initiated.`,
+    status: "submitted" as ARStatus
   },
 ];
+
+import { ShipmentDetailsDialog } from "@/components/shipment-details-dialog";
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<"ap" | "ar">("ap");
@@ -249,6 +251,7 @@ export default function Dashboard() {
   const [apFilter, setApFilter] = useState<APStatus | "all">("all");
   const [arFilter, setArFilter] = useState<ARStatus | "all">("all");
   const [completedAPShipments, setCompletedAPShipments] = useState<Set<string>>(new Set());
+  const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
   const timeoutRefs = useRef<NodeJS.Timeout[]>([]);
   const hasAutoStarted = useRef(false);
 
@@ -259,7 +262,7 @@ export default function Dashboard() {
 
   const runARForShipment = useCallback((shipment: Shipment, baseDelay: number = 0) => {
     const arSteps = createARSteps(shipment);
-    
+
     arSteps.forEach((step, index) => {
       const timeout = setTimeout(() => {
         const newActivity: Activity = {
@@ -272,21 +275,21 @@ export default function Dashboard() {
           timestamp: new Date(),
           metadata: step.document ? { document: step.document } : undefined
         };
-        
+
         setActivities(prev => [newActivity, ...prev]);
-        
-        setShipments(prev => prev.map(s => 
+
+        setShipments(prev => prev.map(s =>
           s.id === shipment.id ? { ...s, arStatus: step.status as ARStatus } : s
         ));
       }, baseDelay + step.delay);
-      
+
       timeoutRefs.current.push(timeout);
     });
   }, []);
 
   const runAPForShipment = useCallback((shipment: Shipment, baseDelay: number = 0) => {
     const apSteps = createAPSteps(shipment);
-    
+
     apSteps.forEach((step, index) => {
       const timeout = setTimeout(() => {
         const newActivity: Activity = {
@@ -299,13 +302,13 @@ export default function Dashboard() {
           timestamp: new Date(),
           metadata: step.document ? { document: step.document } : undefined
         };
-        
+
         setActivities(prev => [newActivity, ...prev]);
-        
-        setShipments(prev => prev.map(s => 
+
+        setShipments(prev => prev.map(s =>
           s.id === shipment.id ? { ...s, apStatus: step.status as APStatus } : s
         ));
-        
+
         // When AP audit is complete for this shipment, start AR
         if (step.type === "audit_complete") {
           setCompletedAPShipments(prev => new Set(Array.from(prev).concat(shipment.id)));
@@ -315,7 +318,7 @@ export default function Dashboard() {
           }, 2000);
         }
       }, baseDelay + step.delay);
-      
+
       timeoutRefs.current.push(timeout);
     });
   }, [runARForShipment]);
@@ -326,25 +329,25 @@ export default function Dashboard() {
     setShipments(INITIAL_SHIPMENTS);
     setCompletedAPShipments(new Set());
     setSimulation({ isRunning: true, currentPhase: "ap", currentStep: 0 });
-    
+
     // Run all shipments in parallel with staggered starts
     INITIAL_SHIPMENTS.forEach((shipment, index) => {
-      // Stagger each shipment by 3 seconds
-      runAPForShipment(shipment, index * 3000);
+      // Stagger each shipment by 8 seconds
+      runAPForShipment(shipment, index * 8000);
     });
-    
+
     // Update phase to show AR when first shipment starts AR
     const checkARTimeout = setTimeout(() => {
       setSimulation(prev => ({ ...prev, currentPhase: "ar" }));
-    }, 45000); // Approximate time for first AP to complete
-    
+    }, 45000); // Approximate time for first AP to complete (SHP-002 starts at 8s, ends AP at 53s)
+
     timeoutRefs.current.push(checkARTimeout);
-    
+
     // Mark simulation complete after all shipments finish
     const completeTimeout = setTimeout(() => {
       setSimulation(prev => ({ ...prev, isRunning: false, currentPhase: "complete" }));
-    }, 75000);
-    
+    }, 120000);
+
     timeoutRefs.current.push(completeTimeout);
   }, [clearTimeouts, runAPForShipment]);
 
@@ -369,7 +372,7 @@ export default function Dashboard() {
       const autoStartTimer = setTimeout(() => {
         startSimulation();
       }, 800);
-      
+
       return () => {
         clearTimeout(autoStartTimer);
         clearTimeouts();
@@ -420,31 +423,31 @@ export default function Dashboard() {
                 <p className="text-sm text-muted-foreground">Intelligent Freight Broker Automation</p>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted">
                 <div className={`w-2 h-2 rounded-full ${simulation.isRunning ? 'bg-chart-2 animate-pulse' : simulation.currentPhase === 'complete' ? 'bg-chart-2' : 'bg-muted-foreground'}`} />
                 <span className="text-sm font-medium">
                   {simulation.currentPhase === "idle" ? "Ready" :
-                   simulation.currentPhase === "complete" ? "Complete" :
-                   simulation.isRunning ? `Processing ${shipments.length} Shipments` : "Paused"}
+                    simulation.currentPhase === "complete" ? "Complete" :
+                      simulation.isRunning ? `Processing ${shipments.length} Shipments` : "Paused"}
                 </span>
               </div>
-              
+
               {!simulation.isRunning && simulation.currentPhase === "idle" && (
                 <Button onClick={startSimulation} data-testid="button-start-demo">
                   <Play className="w-4 h-4 mr-2" />
                   Start Demo
                 </Button>
               )}
-              
+
               {simulation.isRunning && (
                 <Button variant="secondary" onClick={pauseSimulation} data-testid="button-pause-demo">
                   <Pause className="w-4 h-4 mr-2" />
                   Pause
                 </Button>
               )}
-              
+
               {(simulation.currentPhase !== "idle" || activities.length > 0) && (
                 <Button variant="outline" onClick={resetSimulation} data-testid="button-reset-demo">
                   <RotateCcw className="w-4 h-4 mr-2" />
@@ -457,29 +460,6 @@ export default function Dashboard() {
       </header>
 
       <div className="container mx-auto px-4 py-6">
-        <div className="mb-6">
-          <Card className="bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
-            <CardContent className="py-4">
-              <div className="flex items-center gap-4 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <Truck className="w-5 h-5 text-primary" />
-                  <span className="font-medium">Demo Flow:</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <Badge variant="outline" className="bg-background">SHIPPER</Badge>
-                  <span className="text-muted-foreground">→</span>
-                  <Badge variant="outline" className="bg-primary/10 border-primary/30">FORWARDER/BROKER/3PL</Badge>
-                  <span className="text-muted-foreground">→</span>
-                  <Badge variant="outline" className="bg-background">CARRIER</Badge>
-                </div>
-                <div className="ml-auto flex items-center gap-2 text-sm text-muted-foreground">
-                  <Mail className="w-4 h-4" />
-                  <span>Processing {shipments.length} shipments in parallel</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "ap" | "ar")} className="space-y-6">
           <TabsList className="grid w-full max-w-md grid-cols-2">
@@ -515,36 +495,36 @@ export default function Dashboard() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <ActivityStream 
-                      activities={apActivities} 
+                    <ActivityStream
+                      activities={apActivities}
                       emptyMessage="Start the demo to see AP activities"
                     />
                   </CardContent>
                 </Card>
               </div>
-              
+
               <div className="space-y-4">
                 <Card>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg">AP Process Flow</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <ProcessStep 
+                    <ProcessStep
                       icon={<Mail className="w-4 h-4" />}
                       title="Receive & Request Docs"
                       description="Get delivery confirmation, request POD/BOL"
                     />
-                    <ProcessStep 
+                    <ProcessStep
                       icon={<FileText className="w-4 h-4" />}
                       title="Scan & Verify Documents"
                       description="AI processes all submitted documents"
                     />
-                    <ProcessStep 
+                    <ProcessStep
                       icon={<AlertCircle className="w-4 h-4" />}
                       title="Dispute Invalid Charges"
                       description="Request proof for unsubstantiated claims"
                     />
-                    <ProcessStep 
+                    <ProcessStep
                       icon={<CheckCircle className="w-4 h-4" />}
                       title="Complete Audit"
                       description="Approve invoice for payment"
@@ -567,36 +547,36 @@ export default function Dashboard() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <ActivityStream 
+                    <ActivityStream
                       activities={arActivities}
                       emptyMessage="AR process starts after each shipment's AP audit is complete"
                     />
                   </CardContent>
                 </Card>
               </div>
-              
+
               <div className="space-y-4">
                 <Card>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg">AR Process Flow</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <ProcessStep 
+                    <ProcessStep
                       icon={<FileText className="w-4 h-4" />}
                       title="Review Shipper Agreement"
                       description="Verify lane rates and terms"
                     />
-                    <ProcessStep 
+                    <ProcessStep
                       icon={<DollarSign className="w-4 h-4" />}
                       title="Generate Invoice"
                       description="Create invoice with all charges"
                     />
-                    <ProcessStep 
+                    <ProcessStep
                       icon={<CheckCircle className="w-4 h-4" />}
                       title="Request Human Approval"
                       description="Queue for review before sending"
                     />
-                    <ProcessStep 
+                    <ProcessStep
                       icon={<Mail className="w-4 h-4" />}
                       title="Send Invoice to Shipper"
                       description="Email invoice with documentation"
@@ -631,14 +611,22 @@ export default function Dashboard() {
               </div>
             </CardHeader>
             <CardContent>
-              <ShipmentTable 
+              <ShipmentTable
                 shipments={filteredShipments}
                 activeTab={activeTab}
+                onShipmentClick={setSelectedShipment}
               />
             </CardContent>
           </Card>
         </div>
       </div>
+
+      <ShipmentDetailsDialog
+        shipment={selectedShipment}
+        activities={activities}
+        open={!!selectedShipment}
+        onOpenChange={(open) => !open && setSelectedShipment(null)}
+      />
     </div>
   );
 }
