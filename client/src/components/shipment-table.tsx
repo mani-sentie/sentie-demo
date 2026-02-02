@@ -13,7 +13,8 @@ const apStatusConfig: Record<APStatus, { label: string; variant: "default" | "se
   in_review: { label: "In Review", variant: "outline" },
   audit_pass: { label: "Audit Pass", variant: "default" },
   in_dispute: { label: "In Dispute", variant: "destructive" },
-  paid: { label: "Paid", variant: "default" }
+  paid: { label: "Paid", variant: "default" },
+  input_required: { label: "Input Required", variant: "destructive" }
 };
 
 const arStatusConfig: Record<ARStatus, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -21,7 +22,8 @@ const arStatusConfig: Record<ARStatus, { label: string; variant: "default" | "se
   for_review: { label: "For Review", variant: "outline" },
   submitted: { label: "Submitted", variant: "default" },
   in_dispute: { label: "In Dispute", variant: "destructive" },
-  collected: { label: "Collected", variant: "default" }
+  collected: { label: "Collected", variant: "default" },
+  input_required: { label: "Input Required", variant: "destructive" }
 };
 
 export function ShipmentTable({ shipments, activeTab, onShipmentClick }: ShipmentTableProps) {
@@ -40,9 +42,12 @@ export function ShipmentTable({ shipments, activeTab, onShipmentClick }: Shipmen
           <TableRow>
             <TableHead>Shipment #</TableHead>
             <TableHead>Route</TableHead>
-            <TableHead>Carrier</TableHead>
-            <TableHead>Shipper</TableHead>
-            <TableHead className="text-right">Rate</TableHead>
+            {activeTab === "ap" ? (
+              <TableHead>Carrier</TableHead>
+            ) : (
+              <TableHead>Shipper</TableHead>
+            )}
+            <TableHead className="text-right">{activeTab === "ap" ? "Lane Rate" : "Amount"}</TableHead>
             <TableHead className="text-right">Invoice</TableHead>
             <TableHead className="text-center">Status</TableHead>
           </TableRow>
@@ -67,14 +72,19 @@ export function ShipmentTable({ shipments, activeTab, onShipmentClick }: Shipmen
                     <div className="text-muted-foreground">→ {shipment.destination}</div>
                   </div>
                 </TableCell>
-                <TableCell>{shipment.carrier}</TableCell>
-                <TableCell>{shipment.shipper}</TableCell>
+                {activeTab === "ap" ? (
+                  <TableCell>{shipment.carrier}</TableCell>
+                ) : (
+                  <TableCell>{shipment.shipper}</TableCell>
+                )}
                 <TableCell className="text-right font-medium">
-                  ${shipment.laneRate.toLocaleString()}
+                  ${activeTab === "ap"
+                    ? shipment.laneRate.toLocaleString()
+                    : shipment.invoiceAmount.toLocaleString()}
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="font-medium">${shipment.invoiceAmount.toLocaleString()}</div>
-                  {shipment.detentionCharge && shipment.detentionCharge > 0 && (
+                  {activeTab === "ap" && shipment.detentionCharge && shipment.detentionCharge > 0 && (
                     <div className="text-xs text-muted-foreground">
                       +${shipment.detentionCharge} detention
                     </div>

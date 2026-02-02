@@ -65,6 +65,13 @@ export function StatusFilters({
           onClick={() => onApFilterChange("paid")}
           testId="filter-ap-paid"
         />
+        <FilterButton
+          label="Input Required"
+          count={apCounts.input_required}
+          active={apFilter === "input_required"}
+          onClick={() => onApFilterChange("input_required")}
+          testId="filter-ap-input-required"
+        />
       </div>
     );
   }
@@ -113,6 +120,13 @@ export function StatusFilters({
         onClick={() => onArFilterChange("collected")}
         testId="filter-ar-collected"
       />
+      <FilterButton
+        label="Input Required"
+        count={arCounts.input_required}
+        active={arFilter === "input_required"}
+        onClick={() => onArFilterChange("input_required")}
+        testId="filter-ar-input-required"
+      />
     </div>
   );
 }
@@ -139,9 +153,8 @@ function FilterButton({
       data-testid={testId}
     >
       {label}
-      <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-        active ? 'bg-primary-foreground/20' : 'bg-muted'
-      }`}>
+      <span className={`text-xs px-1.5 py-0.5 rounded-full ${active ? 'bg-primary-foreground/20' : 'bg-muted'
+        }`}>
         {count}
       </span>
     </Button>

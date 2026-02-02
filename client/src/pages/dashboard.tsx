@@ -7,6 +7,7 @@ import { Play, Pause, RotateCcw, Truck, Bot, Mail, FileText, CheckCircle, AlertC
 import { ActivityStream } from "@/components/activity-stream";
 import { ShipmentTable } from "@/components/shipment-table";
 import { StatusFilters } from "@/components/status-filters";
+import { ChatInterface } from "@/components/chat-interface";
 import type { Shipment, Activity, APStatus, ARStatus, SimulationState } from "@shared/schema";
 
 const INITIAL_SHIPMENTS: Shipment[] = [
@@ -332,7 +333,7 @@ export default function Dashboard() {
         setActivities(prev => [draftActivity, ...prev]);
 
         setShipments(prev => prev.map(s =>
-          s.id === shipment.id ? { ...s, arStatus: step.status as ARStatus, pendingAction: "approve_email" } : s
+          s.id === shipment.id ? { ...s, arStatus: "input_required", pendingAction: "approve_email" } : s
         ));
 
         // Do NOT process next step automatically - PAUSE
@@ -392,7 +393,7 @@ export default function Dashboard() {
         setActivities(prev => [draftActivity, ...prev]);
 
         setShipments(prev => prev.map(s =>
-          s.id === shipment.id ? { ...s, apStatus: step.status as APStatus, pendingAction: "approve_email" } : s
+          s.id === shipment.id ? { ...s, apStatus: "input_required", pendingAction: "approve_email" } : s
         ));
 
         // Do NOT process next step automatically - PAUSE
@@ -511,10 +512,61 @@ export default function Dashboard() {
     setActivities([]);
     setShipments(INITIAL_SHIPMENTS);
     setCompletedAPShipments(new Set());
+    setActiveShipmentSteps({});
+    setPendingDrafts({});
     setSimulation({ isRunning: false, currentPhase: "idle", currentStep: 0 });
     setApFilter("all");
     setArFilter("all");
   }, [clearTimeouts]);
+
+  const resumeSimulation = useCallback(() => {
+    setSimulation(prev => ({ ...prev, isRunning: true }));
+
+    shipments.forEach(shipment => {
+      // Don't resume shipments that are stuck on approval
+      if (shipment.pendingAction === 'approve_email') return;
+
+      const currentIndex = activeShipmentSteps[shipment.id];
+      const isAPComplete = completedAPShipments.has(shipment.id);
+
+      // If it has a current index, resume from there
+      if (currentIndex !== undefined) {
+        if (isAPComplete) {
+          runARForShipment(shipment, currentIndex);
+        } else {
+          runAPForShipment(shipment, currentIndex);
+        }
+      } else if (simulation.currentPhase !== 'complete') {
+        // If it hasn't started yet, start from beginning
+        runAPForShipment(shipment, 0);
+      }
+    });
+  }, [shipments, activeShipmentSteps, completedAPShipments, runAPForShipment, runARForShipment, simulation.currentPhase]);
+
+  const toggleSimulation = useCallback(() => {
+    if (simulation.isRunning) {
+      pauseSimulation();
+    } else if (simulation.currentPhase === 'idle' || simulation.currentPhase === 'complete') {
+      startSimulation();
+    } else {
+      resumeSimulation();
+    }
+  }, [simulation.isRunning, simulation.currentPhase, pauseSimulation, startSimulation, resumeSimulation]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+          return;
+        }
+        e.preventDefault();
+        toggleSimulation();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [toggleSimulation]);
 
   useEffect(() => {
     if (!hasAutoStarted.current) {
@@ -537,6 +589,7 @@ export default function Dashboard() {
     audit_pass: shipments.filter(s => s.apStatus === "audit_pass").length,
     in_dispute: shipments.filter(s => s.apStatus === "in_dispute").length,
     paid: shipments.filter(s => s.apStatus === "paid").length,
+    input_required: shipments.filter(s => s.apStatus === "input_required").length,
     total: shipments.length
   };
 
@@ -546,6 +599,7 @@ export default function Dashboard() {
     submitted: shipments.filter(s => s.arStatus === "submitted").length,
     in_dispute: shipments.filter(s => s.arStatus === "in_dispute").length,
     collected: shipments.filter(s => s.arStatus === "collected").length,
+    input_required: shipments.filter(s => s.arStatus === "input_required").length,
     total: shipments.length
   };
 
@@ -570,7 +624,7 @@ export default function Dashboard() {
               </div>
               <div>
                 <h1 className="text-xl font-semibold">Sentie AI</h1>
-                <p className="text-sm text-muted-foreground">Intelligent Freight Broker Automation</p>
+                <p className="text-sm text-muted-foreground">AP AR on autopilot</p>
               </div>
             </div>
 
@@ -584,7 +638,7 @@ export default function Dashboard() {
                 </span>
               </div>
 
-              {!simulation.isRunning && simulation.currentPhase === "idle" && (
+              {!simulation.isRunning && (simulation.currentPhase === "idle" || simulation.currentPhase === "complete") && (
                 <Button onClick={startSimulation} data-testid="button-start-demo">
                   <Play className="w-4 h-4 mr-2" />
                   Start Demo
@@ -595,6 +649,13 @@ export default function Dashboard() {
                 <Button variant="secondary" onClick={pauseSimulation} data-testid="button-pause-demo">
                   <Pause className="w-4 h-4 mr-2" />
                   Pause
+                </Button>
+              )}
+
+              {!simulation.isRunning && simulation.currentPhase !== "idle" && simulation.currentPhase !== "complete" && (
+                <Button onClick={resumeSimulation} data-testid="button-resume-demo">
+                  <Play className="w-4 h-4 mr-2" />
+                  Resume
                 </Button>
               )}
 
@@ -658,35 +719,39 @@ export default function Dashboard() {
               </div>
 
               <div className="space-y-4">
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg">AP Process Flow</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <ProcessStep
-                      icon={<Mail className="w-4 h-4" />}
-                      title="Receive & Request Docs"
-                      description="Get delivery confirmation, request POD/BOL"
-                    />
-                    <ProcessStep
-                      icon={<FileText className="w-4 h-4" />}
-                      title="Scan & Verify Documents"
-                      description="AI processes all submitted documents"
-                    />
-                    <ProcessStep
-                      icon={<AlertCircle className="w-4 h-4" />}
-                      title="Dispute Invalid Charges"
-                      description="Request proof for unsubstantiated claims"
-                    />
-                    <ProcessStep
-                      icon={<CheckCircle className="w-4 h-4" />}
-                      title="Complete Audit"
-                      description="Approve invoice for payment"
-                    />
-                  </CardContent>
-                </Card>
+                <ChatInterface />
               </div>
             </div>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                  <CardTitle className="flex items-center gap-2">
+                    <Truck className="w-5 h-5 text-primary" />
+                    AP Shipments
+                    <Badge variant="outline" className="ml-2">
+                      {completedAPShipments.size}/{shipments.length} Complete
+                    </Badge>
+                  </CardTitle>
+                  <StatusFilters
+                    activeTab="ap"
+                    apFilter={apFilter}
+                    arFilter={arFilter}
+                    onApFilterChange={setApFilter}
+                    onArFilterChange={setArFilter}
+                    apCounts={apCounts}
+                    arCounts={arCounts}
+                  />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <ShipmentTable
+                  shipments={filteredShipments}
+                  activeTab="ap"
+                  onShipmentClick={setSelectedShipment}
+                />
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="ar" className="space-y-6">
@@ -714,69 +779,38 @@ export default function Dashboard() {
               </div>
 
               <div className="space-y-4">
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg">AR Process Flow</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <ProcessStep
-                      icon={<FileText className="w-4 h-4" />}
-                      title="Review Shipper Agreement"
-                      description="Verify lane rates and terms"
-                    />
-                    <ProcessStep
-                      icon={<DollarSign className="w-4 h-4" />}
-                      title="Generate Invoice"
-                      description="Create invoice with all charges"
-                    />
-                    <ProcessStep
-                      icon={<CheckCircle className="w-4 h-4" />}
-                      title="Request Human Approval"
-                      description="Queue for review before sending"
-                    />
-                    <ProcessStep
-                      icon={<Mail className="w-4 h-4" />}
-                      title="Send Invoice to Shipper"
-                      description="Email invoice with documentation"
-                    />
-                  </CardContent>
-                </Card>
+                <ChatInterface />
               </div>
             </div>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                  <CardTitle className="flex items-center gap-2">
+                    <Truck className="w-5 h-5 text-primary" />
+                    AR Shipments
+                  </CardTitle>
+                  <StatusFilters
+                    activeTab="ar"
+                    apFilter={apFilter}
+                    arFilter={arFilter}
+                    onApFilterChange={setApFilter}
+                    onArFilterChange={setArFilter}
+                    apCounts={apCounts}
+                    arCounts={arCounts}
+                  />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <ShipmentTable
+                  shipments={filteredShipments}
+                  activeTab="ar"
+                  onShipmentClick={setSelectedShipment}
+                />
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
-
-        <div className="mt-8">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between flex-wrap gap-4">
-                <CardTitle className="flex items-center gap-2">
-                  <Truck className="w-5 h-5 text-primary" />
-                  Shipments
-                  <Badge variant="outline" className="ml-2">
-                    {completedAPShipments.size}/{shipments.length} AP Complete
-                  </Badge>
-                </CardTitle>
-                <StatusFilters
-                  activeTab={activeTab}
-                  apFilter={apFilter}
-                  arFilter={arFilter}
-                  onApFilterChange={setApFilter}
-                  onArFilterChange={setArFilter}
-                  apCounts={apCounts}
-                  arCounts={arCounts}
-                />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <ShipmentTable
-                shipments={filteredShipments}
-                activeTab={activeTab}
-                onShipmentClick={setSelectedShipment}
-              />
-            </CardContent>
-          </Card>
-        </div>
       </div>
 
       <ShipmentDetailsDialog
@@ -785,6 +819,7 @@ export default function Dashboard() {
         open={!!selectedShipment}
         onOpenChange={(open) => !open && setSelectedShipment(null)}
         onAction={(shipmentId) => setDraftToApprove(shipmentId)}
+        context={activeTab}
       />
 
       <EmailApprovalDialog
@@ -808,17 +843,4 @@ export default function Dashboard() {
   );
 }
 
-function ProcessStep({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
-  return (
-    <div className="flex items-start gap-3 p-2 rounded-lg bg-muted/50">
-      <div className="w-8 h-8 rounded-full flex items-center justify-center bg-primary/10 text-primary shrink-0">
-        {icon}
-      </div>
-      <div className="min-w-0">
-        <span className="text-sm font-medium block">{title}</span>
-        <span className="text-xs text-muted-foreground">{description}</span>
-      </div>
-    </div>
-  );
-}
 

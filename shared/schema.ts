@@ -6,7 +6,8 @@ export const apStatusSchema = z.enum([
   "in_review",
   "audit_pass",
   "in_dispute",
-  "paid"
+  "paid",
+  "input_required"
 ]);
 
 // Shipment status for AR (Accounts Receivable)
@@ -15,7 +16,8 @@ export const arStatusSchema = z.enum([
   "for_review",
   "submitted",
   "in_dispute",
-  "collected"
+  "collected",
+  "input_required"
 ]);
 
 export type APStatus = z.infer<typeof apStatusSchema>;

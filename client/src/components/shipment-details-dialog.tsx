@@ -13,12 +13,15 @@ interface ShipmentDetailsDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onAction?: (shipmentId: string) => void;
+    context?: 'ap' | 'ar';
 }
 
-export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange, onAction }: ShipmentDetailsDialogProps) {
+export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange, onAction, context }: ShipmentDetailsDialogProps) {
     if (!shipment) return null;
 
-    const shipmentActivities = activities.filter(a => a.shipmentId === shipment.id).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    const shipmentActivities = activities
+        .filter(a => a.shipmentId === shipment.id && (!context || a.category === context))
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
     // Extract documents from activities
     const documents: { name: string; url: string; type: string; timestamp: Date }[] = [];
@@ -32,6 +35,15 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
             });
         }
     });
+
+    // Financial discovery logic
+    const isAPComplete = shipment.apStatus === 'audit_pass' || shipment.apStatus === 'paid';
+    const isARComplete = shipment.arStatus === 'submitted' || shipment.arStatus === 'collected';
+
+    const showLaneRate = isAPComplete || activities.some(a => a.shipmentId === shipment.id && a.title.includes("Rate Con Verified"));
+    const showInvoiceAmount = isAPComplete || activities.some(a => a.shipmentId === shipment.id && a.title.includes("Invoice Analysis"));
+    const showDetention = isAPComplete || activities.some(a => a.shipmentId === shipment.id && a.title.includes("ELD Report Verified"));
+    const showARAmount = isARComplete || activities.some(a => a.shipmentId === shipment.id && (a.type === "invoice_created" || a.title.includes("Invoice Generated")));
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -52,10 +64,10 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
                             </div>
                         </div>
                         <div className="flex flex-col items-end gap-1">
-                            <Badge variant={shipment.apStatus === 'audit_pass' || shipment.apStatus === 'paid' ? 'default' : 'secondary'}>
+                            <Badge variant={shipment.apStatus === 'audit_pass' || shipment.apStatus === 'paid' ? 'default' : shipment.apStatus === 'input_required' ? 'destructive' : 'secondary'}>
                                 AP: {shipment.apStatus.replace('_', ' ')}
                             </Badge>
-                            <Badge variant={shipment.arStatus === 'submitted' || shipment.arStatus === 'collected' ? 'default' : 'outline'}>
+                            <Badge variant={shipment.arStatus === 'submitted' || shipment.arStatus === 'collected' ? 'default' : shipment.arStatus === 'input_required' ? 'destructive' : 'outline'}>
                                 AR: {shipment.arStatus.replace('_', ' ')}
                             </Badge>
                         </div>
@@ -115,19 +127,23 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
                                     </CardHeader>
                                     <CardContent className="p-4 space-y-3">
                                         <div className="flex justify-between items-center">
-                                            <span className="text-sm text-muted-foreground">Lane Rate</span>
-                                            <span className="font-medium">${shipment.laneRate.toLocaleString()}</span>
+                                            <span className="text-sm text-muted-foreground">{context === 'ar' ? 'Shipper Rate' : 'Lane Rate'}</span>
+                                            <span className="font-medium">
+                                                {context === 'ar' ? (showARAmount ? `$${shipment.invoiceAmount.toLocaleString()}` : 'Pending...') : (showLaneRate ? `$${shipment.laneRate.toLocaleString()}` : 'Processing...')}
+                                            </span>
                                         </div>
                                         <div className="flex justify-between items-center">
-                                            <span className="text-sm text-muted-foreground">Invoice Amount</span>
-                                            <span className="font-medium">${shipment.invoiceAmount.toLocaleString()}</span>
+                                            <span className="text-sm text-muted-foreground">{context === 'ar' ? 'Broker Amount' : 'Invoice Amount'}</span>
+                                            <span className="font-medium">
+                                                {context === 'ar' ? (showARAmount ? `$${shipment.invoiceAmount.toLocaleString()}` : 'Pending...') : (showInvoiceAmount ? `$${shipment.invoiceAmount.toLocaleString()}` : 'Processing...')}
+                                            </span>
                                         </div>
-                                        {shipment.detentionCharge && (
+                                        {(context === 'ap' && shipment.detentionCharge) && (
                                             <>
                                                 <Separator />
-                                                <div className="flex justify-between items-center text-amber-600">
+                                                <div className={`flex justify-between items-center ${showDetention ? 'text-amber-600' : 'text-muted-foreground opacity-50'}`}>
                                                     <span className="text-sm font-medium">Detention</span>
-                                                    <span className="font-medium">+${shipment.detentionCharge}</span>
+                                                    <span className="font-medium">{showDetention ? `+$${shipment.detentionCharge}` : 'Analyzing...'}</span>
                                                 </div>
                                             </>
                                         )}
