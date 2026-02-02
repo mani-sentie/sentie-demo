@@ -52,18 +52,27 @@ const INITIAL_SHIPMENTS: Shipment[] = [
   }
 ];
 
+import { EmailApprovalDialog } from "@/components/email-approval-dialog";
+
 interface SimStep {
   delay: number;
-  type: "email_received" | "email_sent" | "document_scanned" | "issue_found" | "approval_requested" | "invoice_created" | "audit_complete" | "payment_sent" | "payment_received";
+  type: "email_received" | "email_sent" | "email_draft" | "document_scanned" | "issue_found" | "approval_requested" | "invoice_created" | "audit_complete" | "payment_sent" | "payment_received";
   title: string;
   description: string;
   status: APStatus | ARStatus;
   document?: { name: string; url: string };
+  requiresApproval?: boolean;
+  draftContent?: {
+    to: string;
+    subject: string;
+    body: string;
+    attachments?: string[];
+  };
 }
 
 const createAPSteps = (shipment: Shipment): SimStep[] => [
   {
-    delay: 0,
+    delay: 1000,
     type: "email_received",
     title: `Delivery Confirmation - ${shipment.shipmentNumber}`,
     description: `Email from ${shipment.carrier} confirming delivery to ${shipment.destination}`,
@@ -71,14 +80,27 @@ const createAPSteps = (shipment: Shipment): SimStep[] => [
     document: { name: "Carrier Delivery Email", url: "/demo/emails/email_01_carrier_delivery_complete.pdf" }
   },
   {
-    delay: 5000,
+    delay: 2000,
+    type: "email_draft" as const,
+    title: `Drafting Document Request - ${shipment.shipmentNumber}`,
+    description: `Drafted email to ${shipment.carrier} asking for POD, BOL, and Invoice`,
+    status: "received" as APStatus,
+    requiresApproval: true,
+    draftContent: {
+      to: "claims@swiftlogistics.com",
+      subject: `Document Request - ${shipment.shipmentNumber}`,
+      body: `Hello,\n\nPlease provide the Proof of Delivery, Bill of Lading, and Invoice for shipment ${shipment.shipmentNumber} delivered to ${shipment.destination}.\n\nThank you,\nSentie AI Auditor`
+    }
+  },
+  {
+    delay: 1000,
     type: "email_sent",
     title: `AI Requests Documents - ${shipment.shipmentNumber}`,
     description: `Sentie AI sent request to ${shipment.carrier} for POD, BOL, and Invoice`,
     status: "received" as APStatus
   },
   {
-    delay: 15000, // 10 second delay for carrier reply
+    delay: 5000, // Carrier reply delay
     type: "email_received",
     title: `Documents Received - ${shipment.shipmentNumber}`,
     description: `${shipment.carrier} submitted invoice with attachments: POD, BOL, Rate Con, Invoice`,
@@ -86,7 +108,7 @@ const createAPSteps = (shipment: Shipment): SimStep[] => [
     document: { name: "Carrier Invoice Email", url: "/demo/emails/email_02_carrier_invoice_submission.pdf" }
   },
   {
-    delay: 20000,
+    delay: 2000,
     type: "document_scanned",
     title: `Scanning BOL - ${shipment.shipmentNumber}`,
     description: `Processing Bill of Lading for ${shipment.origin} to ${shipment.destination}`,
@@ -94,7 +116,7 @@ const createAPSteps = (shipment: Shipment): SimStep[] => [
     document: { name: "Bill of Lading", url: "/demo/documents/01_bill_of_lading.pdf" }
   },
   {
-    delay: 25000,
+    delay: 2000,
     type: "document_scanned",
     title: `POD Verified - ${shipment.shipmentNumber}`,
     description: `Proof of Delivery validated - signature confirmed at ${shipment.destination}`,
@@ -102,7 +124,7 @@ const createAPSteps = (shipment: Shipment): SimStep[] => [
     document: { name: "Proof of Delivery", url: "/demo/documents/02_proof_of_delivery.pdf" }
   },
   {
-    delay: 30000,
+    delay: 2000,
     type: "document_scanned",
     title: `Rate Con Verified - ${shipment.shipmentNumber}`,
     description: `Rate confirmation validated - agreed rate $${shipment.laneRate.toLocaleString()}`,
@@ -110,7 +132,7 @@ const createAPSteps = (shipment: Shipment): SimStep[] => [
     document: { name: "Rate Confirmation", url: "/demo/documents/03_rate_confirmation.pdf" }
   },
   {
-    delay: 35000,
+    delay: 2000,
     type: "document_scanned",
     title: `Invoice Analysis - ${shipment.shipmentNumber}`,
     description: `Invoice for $${shipment.invoiceAmount.toLocaleString()} detected${shipment.detentionCharge ? ` (includes $${shipment.detentionCharge} detention)` : ''}`,
@@ -119,14 +141,27 @@ const createAPSteps = (shipment: Shipment): SimStep[] => [
   },
   ...(shipment.detentionCharge ? [
     {
-      delay: 40000,
+      delay: 2000,
       type: "issue_found" as const,
       title: `Detention Issue - ${shipment.shipmentNumber}`,
       description: `Carrier claims $${shipment.detentionCharge} detention but no supporting documentation provided`,
       status: "in_dispute" as APStatus
     },
     {
-      delay: 45000,
+      delay: 2000,
+      type: "email_draft" as const,
+      title: `Drafting Detention Request - ${shipment.shipmentNumber}`,
+      description: `Drafted email to ${shipment.carrier} requesting gate logs and ELD report`,
+      status: "in_dispute" as APStatus,
+      requiresApproval: true,
+      draftContent: {
+        to: "dispatch@swiftlogistics.com",
+        subject: `Detention Documentation Request - ${shipment.shipmentNumber}`,
+        body: `Hello,\n\n regarding shipment ${shipment.shipmentNumber}, we have received a detention charge of $${shipment.detentionCharge}. \n\nPlease provide the following documentation to substantiate this claim:\n1. Signed Bill of Lading with in/out times\n2. GPS/ELD report showing arrival and departure times\n\nThank you,\nSentie AI Auditor`
+      }
+    },
+    {
+      delay: 1000,
       type: "email_sent" as const,
       title: `Requesting Detention Proof - ${shipment.shipmentNumber}`,
       description: `Sentie AI emailed ${shipment.carrier} requesting gate logs and ELD report`,
@@ -134,14 +169,14 @@ const createAPSteps = (shipment: Shipment): SimStep[] => [
       document: { name: "Detention Request Email", url: "/demo/emails/email_03_sentie_detention_docs_request.pdf" }
     },
     {
-      delay: 55000, // 10 second delay for carrier reply
+      delay: 8000, // Carrier reply delay
       type: "email_received" as const,
       title: `Detention Docs Received - ${shipment.shipmentNumber}`,
       description: `${shipment.carrier} provided gate log and ELD report for detention claim`,
       status: "in_review" as APStatus
     },
     {
-      delay: 60000,
+      delay: 2000,
       type: "document_scanned" as const,
       title: `Gate Log Verified - ${shipment.shipmentNumber}`,
       description: `Gate log confirms wait time exceeding free time allowance`,
@@ -149,7 +184,7 @@ const createAPSteps = (shipment: Shipment): SimStep[] => [
       document: { name: "Gate Log", url: "/demo/documents/08_gate_log.pdf" }
     },
     {
-      delay: 65000,
+      delay: 2000,
       type: "document_scanned" as const,
       title: `ELD Report Verified - ${shipment.shipmentNumber}`,
       description: `ELD data confirms truck stationary at facility, supports detention claim`,
@@ -157,7 +192,7 @@ const createAPSteps = (shipment: Shipment): SimStep[] => [
       document: { name: "ELD Report", url: "/demo/documents/09_eld_report.pdf" }
     },
     {
-      delay: 70000,
+      delay: 2000,
       type: "audit_complete" as const,
       title: `AP Audit Complete - ${shipment.shipmentNumber}`,
       description: `All documents verified. Invoice $${shipment.invoiceAmount.toLocaleString()} approved for payment.`,
@@ -165,7 +200,7 @@ const createAPSteps = (shipment: Shipment): SimStep[] => [
     },
   ] : [
     {
-      delay: 40000,
+      delay: 2000,
       type: "audit_complete" as const,
       title: `AP Audit Complete - ${shipment.shipmentNumber}`,
       description: `All documents verified. Invoice $${shipment.invoiceAmount.toLocaleString()} approved for payment.`,
@@ -176,14 +211,14 @@ const createAPSteps = (shipment: Shipment): SimStep[] => [
 
 const createARSteps = (shipment: Shipment): SimStep[] => [
   {
-    delay: 0,
+    delay: 1000,
     type: "email_received",
     title: `AR Job Opened - ${shipment.shipmentNumber}`,
     description: `Initiating accounts receivable process for shipment to ${shipment.shipper}`,
     status: "preparing" as ARStatus
   },
   {
-    delay: 5000,
+    delay: 2000,
     type: "document_scanned",
     title: `Reviewing Agreement - ${shipment.shipmentNumber}`,
     description: `Scanning shipper agreement with ${shipment.shipper}`,
@@ -191,7 +226,7 @@ const createARSteps = (shipment: Shipment): SimStep[] => [
     document: { name: "Shipper Agreement", url: "/demo/emails/email_04_shipper_broker_arrangement.pdf" }
   },
   {
-    delay: 10000,
+    delay: 2000,
     type: "document_scanned",
     title: `Lane Contract Verified - ${shipment.shipmentNumber}`,
     description: `Lane contract confirms rate for ${shipment.origin} to ${shipment.destination}`,
@@ -199,7 +234,7 @@ const createARSteps = (shipment: Shipment): SimStep[] => [
     document: { name: "Lane Contract", url: "/demo/documents/06_lane_contract.pdf" }
   },
   {
-    delay: 15000,
+    delay: 2000,
     type: "invoice_created",
     title: `Invoice Generated - ${shipment.shipmentNumber}`,
     description: `Created broker invoice for ${shipment.shipper}${shipment.detentionCharge ? ` including $${shipment.detentionCharge} detention` : ''}`,
@@ -207,21 +242,27 @@ const createARSteps = (shipment: Shipment): SimStep[] => [
     document: { name: "Broker Invoice", url: "/demo/documents/07_broker_invoice.pdf" }
   },
   {
-    delay: 20000,
+    delay: 2000,
     type: "document_scanned",
     title: `Evidence Packet Ready - ${shipment.shipmentNumber}`,
     description: `Compiled POD, delivery confirmation, and supporting documentation`,
     status: "for_review" as ARStatus
   },
   {
-    delay: 25000,
-    type: "approval_requested",
-    title: `Approval Requested - ${shipment.shipmentNumber}`,
-    description: `Invoice ready for human review before sending to ${shipment.shipper}`,
-    status: "for_review" as ARStatus
+    delay: 2000,
+    type: "email_draft" as const,
+    title: `Drafting Shipper Invoice - ${shipment.shipmentNumber}`,
+    description: `Drafted invoice email to ${shipment.shipper} for review`,
+    status: "for_review" as ARStatus,
+    requiresApproval: true,
+    draftContent: {
+      to: "accounts.payable@techcorp.com",
+      subject: `Invoice for Shipment ${shipment.shipmentNumber}`,
+      body: `Attached is the invoice for shipment ${shipment.shipmentNumber} from ${shipment.origin} to ${shipment.destination}.\n\nTotal Amount: $${shipment.invoiceAmount.toLocaleString()}\n\nPlease find the following documents attached:\n- Broker Invoice\n- Proof of Delivery\n- Bill of Lading\n\nKind regards,\nSentie Logistics`
+    }
   },
   {
-    delay: 30000,
+    delay: 1000,
     type: "email_sent",
     title: `Invoice Sent - ${shipment.shipmentNumber}`,
     description: `Invoice emailed to ${shipment.shipper} with attached documentation`,
@@ -229,7 +270,7 @@ const createARSteps = (shipment: Shipment): SimStep[] => [
     document: { name: "Invoice Email", url: "/demo/emails/email_05_broker_invoice_to_shipper.pdf" }
   },
   {
-    delay: 35000,
+    delay: 5000,
     type: "payment_received",
     title: `AR Complete - ${shipment.shipmentNumber}`,
     description: `Invoice submitted to ${shipment.shipper}. Payment tracking initiated.`,
@@ -252,6 +293,9 @@ export default function Dashboard() {
   const [arFilter, setArFilter] = useState<ARStatus | "all">("all");
   const [completedAPShipments, setCompletedAPShipments] = useState<Set<string>>(new Set());
   const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
+  const [draftToApprove, setDraftToApprove] = useState<string | null>(null);
+  const [activeShipmentSteps, setActiveShipmentSteps] = useState<Record<string, number>>({});
+  const [pendingDrafts, setPendingDrafts] = useState<Record<string, SimStep['draftContent']>>({});
   const timeoutRefs = useRef<NodeJS.Timeout[]>([]);
   const hasAutoStarted = useRef(false);
 
@@ -260,68 +304,171 @@ export default function Dashboard() {
     timeoutRefs.current = [];
   }, []);
 
-  const runARForShipment = useCallback((shipment: Shipment, baseDelay: number = 0) => {
+  const runARForShipment = useCallback((shipment: Shipment, stepIndex: number = 0) => {
     const arSteps = createARSteps(shipment);
+    if (stepIndex >= arSteps.length) return;
 
-    arSteps.forEach((step, index) => {
-      const timeout = setTimeout(() => {
-        const newActivity: Activity = {
-          id: `ar-${shipment.id}-${Date.now()}-${index}`,
+    // Update active step for resumption
+    setActiveShipmentSteps(prev => ({ ...prev, [shipment.id]: stepIndex }));
+
+    const step = arSteps[stepIndex];
+
+    const timeout = setTimeout(() => {
+      // If this step requires approval, pause here
+      if (step.requiresApproval && step.draftContent) {
+        setPendingDrafts(prev => ({ ...prev, [shipment.id]: step.draftContent }));
+
+        // Add the "Draft created" activity
+        const draftActivity: Activity = {
+          id: `ar-${shipment.id}-${Date.now()}-${stepIndex}`,
           shipmentId: shipment.id,
-          type: step.type,
+          type: "email_draft",
           category: "ar",
           title: step.title,
           description: step.description,
           timestamp: new Date(),
-          metadata: step.document ? { document: step.document } : undefined
+          metadata: { pendingAction: true }
         };
-
-        setActivities(prev => [newActivity, ...prev]);
+        setActivities(prev => [draftActivity, ...prev]);
 
         setShipments(prev => prev.map(s =>
-          s.id === shipment.id ? { ...s, arStatus: step.status as ARStatus } : s
+          s.id === shipment.id ? { ...s, arStatus: step.status as ARStatus, pendingAction: "approve_email" } : s
         ));
-      }, baseDelay + step.delay);
 
-      timeoutRefs.current.push(timeout);
-    });
+        // Do NOT process next step automatically - PAUSE
+        return;
+      }
+
+      const newActivity: Activity = {
+        id: `ar-${shipment.id}-${Date.now()}-${stepIndex}`,
+        shipmentId: shipment.id,
+        type: step.type,
+        category: "ar",
+        title: step.title,
+        description: step.description,
+        timestamp: new Date(),
+        metadata: step.document ? { document: step.document } : undefined
+      };
+
+      setActivities(prev => [newActivity, ...prev]);
+
+      setShipments(prev => prev.map(s =>
+        s.id === shipment.id ? { ...s, arStatus: step.status as ARStatus } : s
+      ));
+
+      // Continue to next step
+      runARForShipment(shipment, stepIndex + 1);
+
+    }, step.delay);
+
+    timeoutRefs.current.push(timeout);
   }, []);
 
-  const runAPForShipment = useCallback((shipment: Shipment, baseDelay: number = 0) => {
+  const runAPForShipment = useCallback((shipment: Shipment, stepIndex: number = 0) => {
     const apSteps = createAPSteps(shipment);
+    if (stepIndex >= apSteps.length) return;
 
-    apSteps.forEach((step, index) => {
-      const timeout = setTimeout(() => {
-        const newActivity: Activity = {
-          id: `ap-${shipment.id}-${Date.now()}-${index}`,
+    // Update active step for resumption
+    setActiveShipmentSteps(prev => ({ ...prev, [shipment.id]: stepIndex }));
+
+    const step = apSteps[stepIndex];
+
+    const timeout = setTimeout(() => {
+      // If this step requires approval, pause here
+      if (step.requiresApproval && step.draftContent) {
+        setPendingDrafts(prev => ({ ...prev, [shipment.id]: step.draftContent }));
+
+        // Add the "Draft created" activity
+        const draftActivity: Activity = {
+          id: `ap-${shipment.id}-${Date.now()}-${stepIndex}`,
           shipmentId: shipment.id,
-          type: step.type,
+          type: "email_draft",
           category: "ap",
           title: step.title,
           description: step.description,
           timestamp: new Date(),
-          metadata: step.document ? { document: step.document } : undefined
+          metadata: { pendingAction: true }
         };
-
-        setActivities(prev => [newActivity, ...prev]);
+        setActivities(prev => [draftActivity, ...prev]);
 
         setShipments(prev => prev.map(s =>
-          s.id === shipment.id ? { ...s, apStatus: step.status as APStatus } : s
+          s.id === shipment.id ? { ...s, apStatus: step.status as APStatus, pendingAction: "approve_email" } : s
         ));
 
-        // When AP audit is complete for this shipment, start AR
-        if (step.type === "audit_complete") {
-          setCompletedAPShipments(prev => new Set(Array.from(prev).concat(shipment.id)));
-          // Start AR for this shipment after a brief pause
-          setTimeout(() => {
-            runARForShipment(shipment, 0);
-          }, 2000);
-        }
-      }, baseDelay + step.delay);
+        // Do NOT process next step automatically - PAUSE
+        return;
+      }
 
-      timeoutRefs.current.push(timeout);
-    });
+      const newActivity: Activity = {
+        id: `ap-${shipment.id}-${Date.now()}-${stepIndex}`,
+        shipmentId: shipment.id,
+        type: step.type,
+        category: "ap",
+        title: step.title,
+        description: step.description,
+        timestamp: new Date(),
+        metadata: step.document ? { document: step.document } : undefined
+      };
+
+      setActivities(prev => [newActivity, ...prev]);
+
+      setShipments(prev => prev.map(s =>
+        s.id === shipment.id ? { ...s, apStatus: step.status as APStatus } : s
+      ));
+
+      // When AP audit is complete for this shipment, start AR
+      if (step.type === "audit_complete") {
+        setCompletedAPShipments(prev => new Set(Array.from(prev).concat(shipment.id)));
+        // Start AR for this shipment after a brief pause
+        setTimeout(() => {
+          runARForShipment(shipment, 0);
+        }, 2000);
+      } else {
+        // Continue to next step
+        runAPForShipment(shipment, stepIndex + 1);
+      }
+    }, step.delay);
+
+    timeoutRefs.current.push(timeout);
   }, [runARForShipment]);
+
+  const handleApproveDraft = (shipmentId: string) => {
+    const shipment = shipments.find(s => s.id === shipmentId);
+    if (!shipment) return;
+
+    // Clear pending state
+    setPendingDrafts(prev => {
+      const copy = { ...prev };
+      delete copy[shipmentId];
+      return copy;
+    });
+
+    setShipments(prev => prev.map(s =>
+      s.id === shipmentId ? { ...s, pendingAction: undefined } : s
+    ));
+
+    // Update activities to remove the "Review Draft" button
+    setActivities(prev => prev.map(a =>
+      (a.shipmentId === shipmentId && a.type === 'email_draft' && a.metadata?.pendingAction)
+        ? { ...a, metadata: { ...a.metadata, pendingAction: false } }
+        : a
+    ));
+
+    // Resume execution
+    // The activeShipmentSteps points to the step index that was *just executed* (the paused draft step)
+    // So we need to resume from activeShipmentSteps + 1
+    const currentIndex = activeShipmentSteps[shipmentId];
+
+    const isAPComplete = completedAPShipments.has(shipmentId);
+
+    if (isAPComplete) {
+      // Resume AR
+      runARForShipment(shipment, currentIndex + 1);
+    } else {
+      // Resume AP
+      runAPForShipment(shipment, currentIndex + 1);
+    }
+  };
 
   const startSimulation = useCallback(() => {
     clearTimeouts();
@@ -333,13 +480,16 @@ export default function Dashboard() {
     // Run all shipments in parallel with staggered starts
     INITIAL_SHIPMENTS.forEach((shipment, index) => {
       // Stagger each shipment by 8 seconds
-      runAPForShipment(shipment, index * 8000);
+      const timeout = setTimeout(() => {
+        runAPForShipment(shipment, 0);
+      }, index * 8000);
+      timeoutRefs.current.push(timeout);
     });
 
     // Update phase to show AR when first shipment starts AR
     const checkARTimeout = setTimeout(() => {
       setSimulation(prev => ({ ...prev, currentPhase: "ar" }));
-    }, 45000); // Approximate time for first AP to complete (SHP-002 starts at 8s, ends AP at 53s)
+    }, 45000 + (INITIAL_SHIPMENTS.length * 8000)); // Adjust based on total stagger
 
     timeoutRefs.current.push(checkARTimeout);
 
@@ -498,6 +648,10 @@ export default function Dashboard() {
                     <ActivityStream
                       activities={apActivities}
                       emptyMessage="Start the demo to see AP activities"
+                      onAction={(activity) => {
+                        setDraftToApprove(activity.shipmentId);
+                        setSelectedShipment(shipments.find(s => s.id === activity.shipmentId) || null);
+                      }}
                     />
                   </CardContent>
                 </Card>
@@ -550,6 +704,10 @@ export default function Dashboard() {
                     <ActivityStream
                       activities={arActivities}
                       emptyMessage="AR process starts after each shipment's AP audit is complete"
+                      onAction={(activity) => {
+                        setDraftToApprove(activity.shipmentId);
+                        setSelectedShipment(shipments.find(s => s.id === activity.shipmentId) || null);
+                      }}
                     />
                   </CardContent>
                 </Card>
@@ -622,10 +780,29 @@ export default function Dashboard() {
       </div>
 
       <ShipmentDetailsDialog
-        shipment={selectedShipment}
+        shipment={selectedShipment ? (shipments.find(s => s.id === selectedShipment.id) || selectedShipment) : null}
         activities={activities}
         open={!!selectedShipment}
         onOpenChange={(open) => !open && setSelectedShipment(null)}
+        onAction={(shipmentId) => setDraftToApprove(shipmentId)}
+      />
+
+      <EmailApprovalDialog
+        open={Object.keys(pendingDrafts).length > 0 && !!selectedShipment && !!pendingDrafts[selectedShipment.id]}
+        onOpenChange={(open) => !open && setSelectedShipment(null)} // Close dialog closes selected shipment focus if we want? Actually let's just use a separate state if needed, or re-use selectedShipment logic.
+        /* 
+          Actually, we need to know WHICH draft we are approving. 
+          If handling from ActivityStream action, we need a way to open this dialog.
+          Let's add a specialized state for "draftToApprove" {shipmentId, draft}
+        */
+        draft={draftToApprove ? (pendingDrafts[draftToApprove] || null) : null}
+        onApprove={() => {
+          if (draftToApprove) {
+            handleApproveDraft(draftToApprove);
+            setDraftToApprove(null);
+          }
+        }}
+        onCancel={() => setDraftToApprove(null)}
       />
     </div>
   );

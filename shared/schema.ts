@@ -3,7 +3,7 @@ import { z } from "zod";
 // Shipment status for AP (Accounts Payable)
 export const apStatusSchema = z.enum([
   "received",
-  "in_review", 
+  "in_review",
   "audit_pass",
   "in_dispute",
   "paid"
@@ -25,6 +25,7 @@ export type ARStatus = z.infer<typeof arStatusSchema>;
 export const activityTypeSchema = z.enum([
   "email_received",
   "email_sent",
+  "email_draft",
   "document_scanned",
   "issue_found",
   "approval_requested",
@@ -49,7 +50,8 @@ export const shipmentSchema = z.object({
   detentionCharge: z.number().optional(),
   apStatus: apStatusSchema,
   arStatus: arStatusSchema,
-  createdAt: z.date()
+  createdAt: z.date(),
+  pendingAction: z.enum(["approve_email"]).optional()
 });
 
 export type Shipment = z.infer<typeof shipmentSchema>;

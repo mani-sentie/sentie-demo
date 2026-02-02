@@ -12,9 +12,10 @@ interface ShipmentDetailsDialogProps {
     activities: Activity[];
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    onAction?: (shipmentId: string) => void;
 }
 
-export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange }: ShipmentDetailsDialogProps) {
+export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange, onAction }: ShipmentDetailsDialogProps) {
     if (!shipment) return null;
 
     const shipmentActivities = activities.filter(a => a.shipmentId === shipment.id).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
@@ -60,6 +61,23 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
                         </div>
                     </div>
                 </DialogHeader>
+
+                {shipment.pendingAction && (
+                    <div className="px-6 pb-2">
+                        <div className="bg-orange-50 border border-orange-200 rounded-md p-3 flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-orange-800">
+                                <AlertCircle className="h-5 w-5" />
+                                <span className="font-medium">Action Required: Email Draft Pending Review</span>
+                            </div>
+                            <button
+                                onClick={() => onAction?.(shipment.id)}
+                                className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors"
+                            >
+                                Review Draft
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 <div className="flex-1 overflow-hidden grid grid-cols-1 md:grid-cols-3">
                     {/* Left Column: Details & Documents */}
