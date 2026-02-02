@@ -3,7 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Play, Pause, RotateCcw, Truck, Bot, Mail, FileText, CheckCircle, AlertCircle, Clock, DollarSign } from "lucide-react";
+import { Play, Pause, RotateCcw, Truck, Bot, Mail, FileText, CheckCircle, AlertCircle, Clock, DollarSign, ExternalLink } from "lucide-react";
 import { ActivityStream } from "@/components/activity-stream";
 import { ShipmentTable } from "@/components/shipment-table";
 import { StatusFilters } from "@/components/status-filters";
@@ -53,28 +53,177 @@ const DEMO_SHIPMENTS: Shipment[] = [
 ];
 
 const AP_SIMULATION_STEPS = [
-  { delay: 0, type: "email_received" as const, title: "Delivery Confirmation Received", description: "Email from Swift Logistics confirming delivery of shipment FRT-2024-0847 to Dallas, TX", status: "received" as APStatus },
-  { delay: 2000, type: "email_sent" as const, title: "AI Requests Proof of Delivery", description: "Automated email sent to carrier requesting POD, BOL, and invoice documents", status: "received" as APStatus },
-  { delay: 4000, type: "email_received" as const, title: "Documents Received from Carrier", description: "Received attachment package: POD, Rate Con, Invoice, Detention Charge claim", status: "in_review" as APStatus },
-  { delay: 6000, type: "document_scanned" as const, title: "AI Scanning Documents", description: "Processing POD, Rate Confirmation, and Invoice...", status: "in_review" as APStatus },
-  { delay: 8000, type: "document_scanned" as const, title: "POD Verified", description: "Proof of Delivery document validated - signature and timestamp confirmed", status: "in_review" as APStatus },
-  { delay: 10000, type: "issue_found" as const, title: "Detention Charge Issue Detected", description: "Carrier claims $300 detention charge but no supporting documentation provided", status: "in_dispute" as APStatus },
-  { delay: 12000, type: "document_scanned" as const, title: "Rate Con Verified", description: "Rate confirmation matches agreed lane rate of $2,850", status: "in_dispute" as APStatus },
-  { delay: 14000, type: "email_sent" as const, title: "AI Disputes Detention Charge", description: "Email sent to carrier requesting proof of detention with timestamps and driver logs", status: "in_dispute" as APStatus },
-  { delay: 18000, type: "email_received" as const, title: "Corrected Invoice Received", description: "Carrier submitted revised invoice for $2,850 without detention charge", status: "in_review" as APStatus },
-  { delay: 20000, type: "document_scanned" as const, title: "Revised Invoice Verified", description: "Invoice amount $2,850 matches rate confirmation - all documents validated", status: "audit_pass" as APStatus },
-  { delay: 22000, type: "audit_complete" as const, title: "AP Audit Complete", description: "All documents verified. Ready for payment processing.", status: "audit_pass" as APStatus },
+  { 
+    delay: 0, 
+    type: "email_received" as const, 
+    title: "Delivery Confirmation Email Received", 
+    description: "Email from Swift Logistics confirming delivery of shipment FRT-2024-0847 to Dallas, TX warehouse", 
+    status: "received" as APStatus,
+    document: { name: "Carrier Delivery Email", url: "/demo/emails/email_01_carrier_delivery_complete.pdf" }
+  },
+  { 
+    delay: 2500, 
+    type: "email_sent" as const, 
+    title: "AI Acknowledges & Requests Documents", 
+    description: "Sentie AI automatically sent acknowledgment to carrier and requested Proof of Delivery, Bill of Lading, and Invoice", 
+    status: "received" as APStatus 
+  },
+  { 
+    delay: 5000, 
+    type: "email_received" as const, 
+    title: "Invoice & Documents Received from Carrier", 
+    description: "Carrier submitted invoice with attachments: POD, BOL, Rate Con, Invoice with $300 detention charge", 
+    status: "in_review" as APStatus,
+    document: { name: "Carrier Invoice Email", url: "/demo/emails/email_02_carrier_invoice_submission.pdf" }
+  },
+  { 
+    delay: 7500, 
+    type: "document_scanned" as const, 
+    title: "AI Scanning Bill of Lading", 
+    description: "Processing BOL document - verifying shipment details, origin/destination, weight, and commodity information", 
+    status: "in_review" as APStatus,
+    document: { name: "Bill of Lading", url: "/demo/documents/01_bill_of_lading.pdf" }
+  },
+  { 
+    delay: 10000, 
+    type: "document_scanned" as const, 
+    title: "Proof of Delivery Verified", 
+    description: "POD validated - receiver signature confirmed, delivery timestamp: 02/01/2024 14:32 CST, no exceptions noted", 
+    status: "in_review" as APStatus,
+    document: { name: "Proof of Delivery", url: "/demo/documents/02_proof_of_delivery.pdf" }
+  },
+  { 
+    delay: 12500, 
+    type: "document_scanned" as const, 
+    title: "Rate Confirmation Verified", 
+    description: "Rate Con validated - agreed rate $2,850 matches carrier agreement. Accessorials: lumper $0, detention TBD", 
+    status: "in_review" as APStatus,
+    document: { name: "Rate Confirmation", url: "/demo/documents/03_rate_confirmation.pdf" }
+  },
+  { 
+    delay: 15000, 
+    type: "document_scanned" as const, 
+    title: "Carrier Invoice Analysis", 
+    description: "Invoice #INV-78432 for $3,150 detected. Base rate $2,850 + $300 detention charge claimed", 
+    status: "in_review" as APStatus,
+    document: { name: "Carrier Invoice", url: "/demo/documents/04_carrier_invoice.pdf" }
+  },
+  { 
+    delay: 17500, 
+    type: "issue_found" as const, 
+    title: "Detention Charge Issue Detected", 
+    description: "AI flagged: Carrier claims $300 detention but no supporting documentation (gate log, ELD, timestamps) provided", 
+    status: "in_dispute" as APStatus 
+  },
+  { 
+    delay: 20000, 
+    type: "email_sent" as const, 
+    title: "AI Requests Detention Documentation", 
+    description: "Automated email sent to carrier requesting proof of detention: gate logs, ELD report, and facility timestamps", 
+    status: "in_dispute" as APStatus,
+    document: { name: "Detention Request Email", url: "/demo/emails/email_03_sentie_detention_docs_request.pdf" }
+  },
+  { 
+    delay: 24000, 
+    type: "email_received" as const, 
+    title: "Detention Documentation Received", 
+    description: "Carrier provided detention proof: gate log shows 3.5 hour wait, ELD confirms driver on-site from 08:15 to 11:45", 
+    status: "in_review" as APStatus 
+  },
+  { 
+    delay: 26500, 
+    type: "document_scanned" as const, 
+    title: "Gate Log Verified", 
+    description: "Gate log validated - driver check-in 08:15, dock assignment 11:42, confirms 3hr 27min wait exceeding 2hr free time", 
+    status: "in_review" as APStatus,
+    document: { name: "Gate Log", url: "/demo/documents/08_gate_log.pdf" }
+  },
+  { 
+    delay: 29000, 
+    type: "document_scanned" as const, 
+    title: "ELD Report Verified", 
+    description: "ELD data confirms: truck arrived 08:12, stationary at facility until 11:48, supports detention claim", 
+    status: "in_review" as APStatus,
+    document: { name: "ELD Report", url: "/demo/documents/09_eld_report.pdf" }
+  },
+  { 
+    delay: 31500, 
+    type: "document_scanned" as const, 
+    title: "Detention Documentation Approved", 
+    description: "Detention charge of $300 validated - 1.5 hours billable at $200/hr rate per rate confirmation terms", 
+    status: "in_review" as APStatus,
+    document: { name: "Detention Documentation", url: "/demo/documents/05_detention_documentation.pdf" }
+  },
+  { 
+    delay: 34000, 
+    type: "audit_complete" as const, 
+    title: "AP Audit Complete", 
+    description: "All documents verified. Invoice $3,150 approved for payment. Carrier rate $2,850 + $300 valid detention.", 
+    status: "audit_pass" as APStatus 
+  },
 ];
 
 const AR_SIMULATION_STEPS = [
-  { delay: 0, type: "email_received" as const, title: "AR Job Opened", description: "Initiating accounts receivable process for shipment FRT-2024-0847", status: "preparing" as ARStatus },
-  { delay: 2000, type: "document_scanned" as const, title: "Reviewing Shipment Communication", description: "Scanning email thread between TechCorp Industries and broker", status: "preparing" as ARStatus },
-  { delay: 4000, type: "document_scanned" as const, title: "Lane Rate Confirmed", description: "Found agreed rate of $3,450 in shipper communication dated Jan 15", status: "preparing" as ARStatus },
-  { delay: 6000, type: "invoice_created" as const, title: "Invoice Generated", description: "Created invoice #INV-2024-0847 for $3,450 including $300 detention at shipper facility", status: "preparing" as ARStatus },
-  { delay: 8000, type: "document_scanned" as const, title: "Evidence Packet Assembled", description: "Compiled email proof showing shipper delay caused detention charges", status: "for_review" as ARStatus },
-  { delay: 10000, type: "approval_requested" as const, title: "Human Approval Requested", description: "Invoice and evidence packet ready for review. Awaiting approval to send.", status: "for_review" as ARStatus },
-  { delay: 14000, type: "email_sent" as const, title: "Invoice Sent to Shipper", description: "Invoice #INV-2024-0847 emailed to TechCorp Industries with supporting documentation", status: "submitted" as ARStatus },
-  { delay: 16000, type: "payment_received" as const, title: "AR Complete", description: "Invoice submitted and tracking payment collection.", status: "submitted" as ARStatus },
+  { 
+    delay: 0, 
+    type: "email_received" as const, 
+    title: "AR Job Opened", 
+    description: "Initiating accounts receivable process for shipment FRT-2024-0847. Reviewing shipper communication history.", 
+    status: "preparing" as ARStatus 
+  },
+  { 
+    delay: 2500, 
+    type: "document_scanned" as const, 
+    title: "Reviewing Shipper-Broker Agreement", 
+    description: "Found email thread confirming shipment booking. TechCorp Industries agreed to lane rate plus accessorials.", 
+    status: "preparing" as ARStatus,
+    document: { name: "Shipper Agreement Email", url: "/demo/emails/email_04_shipper_broker_arrangement.pdf" }
+  },
+  { 
+    delay: 5000, 
+    type: "document_scanned" as const, 
+    title: "Lane Contract Verified", 
+    description: "Lane contract confirms rate of $3,450 for LA to Dallas. Detention clause: shipper responsible for delays at destination.", 
+    status: "preparing" as ARStatus,
+    document: { name: "Lane Contract", url: "/demo/documents/06_lane_contract.pdf" }
+  },
+  { 
+    delay: 7500, 
+    type: "invoice_created" as const, 
+    title: "Invoice Generated", 
+    description: "Created invoice #BRK-2024-0847 for $3,750 - Lane rate $3,450 + $300 detention (shipper facility delay)", 
+    status: "preparing" as ARStatus,
+    document: { name: "Broker Invoice", url: "/demo/documents/07_broker_invoice.pdf" }
+  },
+  { 
+    delay: 10000, 
+    type: "document_scanned" as const, 
+    title: "Evidence Packet Assembled", 
+    description: "Compiled supporting documents: POD, gate log, ELD report proving shipper facility caused 3.5hr detention", 
+    status: "for_review" as ARStatus 
+  },
+  { 
+    delay: 12500, 
+    type: "approval_requested" as const, 
+    title: "Human Approval Requested", 
+    description: "Invoice #BRK-2024-0847 and evidence packet ready for review. Awaiting approval to send to TechCorp Industries.", 
+    status: "for_review" as ARStatus 
+  },
+  { 
+    delay: 17000, 
+    type: "email_sent" as const, 
+    title: "Invoice Sent to Shipper", 
+    description: "Invoice emailed to TechCorp Industries with attached POD, detention documentation, and payment terms (Net 30)", 
+    status: "submitted" as ARStatus,
+    document: { name: "Invoice Email", url: "/demo/emails/email_05_broker_invoice_to_shipper.pdf" }
+  },
+  { 
+    delay: 19500, 
+    type: "payment_received" as const, 
+    title: "AR Complete", 
+    description: "Invoice submitted successfully. Payment tracking initiated. Expected collection: Net 30 terms.", 
+    status: "submitted" as ARStatus 
+  },
 ];
 
 export default function Dashboard() {
@@ -89,6 +238,7 @@ export default function Dashboard() {
   const [apFilter, setApFilter] = useState<APStatus | "all">("all");
   const [arFilter, setArFilter] = useState<ARStatus | "all">("all");
   const timeoutRefs = useRef<NodeJS.Timeout[]>([]);
+  const hasAutoStarted = useRef(false);
 
   const clearTimeouts = useCallback(() => {
     timeoutRefs.current.forEach(clearTimeout);
@@ -108,7 +258,8 @@ export default function Dashboard() {
           category: "ap",
           title: step.title,
           description: step.description,
-          timestamp: new Date()
+          timestamp: new Date(),
+          metadata: step.document ? { document: step.document } : undefined
         };
         
         setActivities(prev => [newActivity, ...prev]);
@@ -142,7 +293,8 @@ export default function Dashboard() {
           category: "ar",
           title: step.title,
           description: step.description,
-          timestamp: new Date()
+          timestamp: new Date(),
+          metadata: step.document ? { document: step.document } : undefined
         };
         
         setActivities(prev => [newActivity, ...prev]);
@@ -184,15 +336,18 @@ export default function Dashboard() {
   }, [clearTimeouts]);
 
   useEffect(() => {
-    // Auto-start demo after a short delay when page loads
-    const autoStartTimer = setTimeout(() => {
-      startSimulation();
-    }, 1000);
-    
-    return () => {
-      clearTimeout(autoStartTimer);
-      clearTimeouts();
-    };
+    if (!hasAutoStarted.current) {
+      hasAutoStarted.current = true;
+      const autoStartTimer = setTimeout(() => {
+        startSimulation();
+      }, 800);
+      
+      return () => {
+        clearTimeout(autoStartTimer);
+        clearTimeouts();
+      };
+    }
+    return () => clearTimeouts();
   }, []);
 
   const apCounts = {
@@ -359,16 +514,34 @@ export default function Dashboard() {
                     />
                     <ProcessStep 
                       icon={<AlertCircle className="w-4 h-4" />}
-                      title="Dispute Invalid Charges"
-                      active={simulation.currentPhase === "ap" && simulation.currentStep >= 8 && simulation.currentStep <= 9}
-                      complete={simulation.currentPhase === "ap" && simulation.currentStep > 9 || simulation.currentPhase === "ar" || simulation.currentPhase === "complete"}
+                      title="Dispute & Request Proof"
+                      active={simulation.currentPhase === "ap" && simulation.currentStep >= 8 && simulation.currentStep <= 10}
+                      complete={simulation.currentPhase === "ap" && simulation.currentStep > 10 || simulation.currentPhase === "ar" || simulation.currentPhase === "complete"}
                     />
                     <ProcessStep 
                       icon={<CheckCircle className="w-4 h-4" />}
-                      title="Complete Audit"
-                      active={simulation.currentPhase === "ap" && simulation.currentStep >= 10}
+                      title="Verify & Complete Audit"
+                      active={simulation.currentPhase === "ap" && simulation.currentStep >= 11}
                       complete={simulation.currentPhase === "ar" || simulation.currentPhase === "complete"}
                     />
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <FileText className="w-5 h-5 text-primary" />
+                      Documents
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <DocumentLink name="Bill of Lading" url="/demo/documents/01_bill_of_lading.pdf" />
+                    <DocumentLink name="Proof of Delivery" url="/demo/documents/02_proof_of_delivery.pdf" />
+                    <DocumentLink name="Rate Confirmation" url="/demo/documents/03_rate_confirmation.pdf" />
+                    <DocumentLink name="Carrier Invoice" url="/demo/documents/04_carrier_invoice.pdf" />
+                    <DocumentLink name="Detention Docs" url="/demo/documents/05_detention_documentation.pdf" />
+                    <DocumentLink name="Gate Log" url="/demo/documents/08_gate_log.pdf" />
+                    <DocumentLink name="ELD Report" url="/demo/documents/09_eld_report.pdf" />
                   </CardContent>
                 </Card>
               </div>
@@ -402,20 +575,20 @@ export default function Dashboard() {
                   <CardContent className="space-y-3">
                     <ProcessStep 
                       icon={<FileText className="w-4 h-4" />}
-                      title="Open AR Job"
-                      active={simulation.currentPhase === "ar" && simulation.currentStep >= 1 && simulation.currentStep <= 2}
-                      complete={simulation.currentPhase === "ar" && simulation.currentStep > 2 || simulation.currentPhase === "complete"}
+                      title="Review Shipper Agreement"
+                      active={simulation.currentPhase === "ar" && simulation.currentStep >= 1 && simulation.currentStep <= 3}
+                      complete={simulation.currentPhase === "ar" && simulation.currentStep > 3 || simulation.currentPhase === "complete"}
                     />
                     <ProcessStep 
                       icon={<DollarSign className="w-4 h-4" />}
                       title="Generate Invoice"
-                      active={simulation.currentPhase === "ar" && simulation.currentStep >= 3 && simulation.currentStep <= 4}
-                      complete={simulation.currentPhase === "ar" && simulation.currentStep > 4 || simulation.currentPhase === "complete"}
+                      active={simulation.currentPhase === "ar" && simulation.currentStep >= 4 && simulation.currentStep <= 5}
+                      complete={simulation.currentPhase === "ar" && simulation.currentStep > 5 || simulation.currentPhase === "complete"}
                     />
                     <ProcessStep 
                       icon={<CheckCircle className="w-4 h-4" />}
                       title="Request Human Approval"
-                      active={simulation.currentPhase === "ar" && simulation.currentStep >= 5 && simulation.currentStep <= 6}
+                      active={simulation.currentPhase === "ar" && simulation.currentStep >= 6 && simulation.currentStep <= 6}
                       complete={simulation.currentPhase === "ar" && simulation.currentStep > 6 || simulation.currentPhase === "complete"}
                     />
                     <ProcessStep 
@@ -424,6 +597,21 @@ export default function Dashboard() {
                       active={simulation.currentPhase === "ar" && simulation.currentStep >= 7}
                       complete={simulation.currentPhase === "complete"}
                     />
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <FileText className="w-5 h-5 text-primary" />
+                      Documents
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <DocumentLink name="Lane Contract" url="/demo/documents/06_lane_contract.pdf" />
+                    <DocumentLink name="Broker Invoice" url="/demo/documents/07_broker_invoice.pdf" />
+                    <DocumentLink name="Shipper Agreement" url="/demo/emails/email_04_shipper_broker_arrangement.pdf" />
+                    <DocumentLink name="Invoice Email" url="/demo/emails/email_05_broker_invoice_to_shipper.pdf" />
                   </CardContent>
                 </Card>
               </div>
@@ -479,5 +667,23 @@ function ProcessStep({ icon, title, active, complete }: { icon: React.ReactNode;
         {title}
       </span>
     </div>
+  );
+}
+
+function DocumentLink({ name, url }: { name: string; url: string }) {
+  return (
+    <a 
+      href={url} 
+      target="_blank" 
+      rel="noopener noreferrer"
+      className="flex items-center justify-between p-2 rounded-lg bg-muted/50 hover-elevate transition-colors group"
+      data-testid={`doc-link-${name.toLowerCase().replace(/\s+/g, '-')}`}
+    >
+      <div className="flex items-center gap-2">
+        <FileText className="w-4 h-4 text-muted-foreground" />
+        <span className="text-sm">{name}</span>
+      </div>
+      <ExternalLink className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+    </a>
   );
 }

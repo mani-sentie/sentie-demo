@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Mail, FileText, AlertTriangle, CheckCircle, Send, FileCheck, DollarSign, Clock } from "lucide-react";
+import { Mail, FileText, AlertTriangle, CheckCircle, Send, FileCheck, DollarSign, Clock, ExternalLink } from "lucide-react";
 import type { Activity, ActivityType } from "@shared/schema";
 
 interface ActivityStreamProps {
@@ -86,6 +86,8 @@ function ActivityItem({ activity, isNew }: { activity: Activity; isNew: boolean 
     minute: '2-digit',
     second: '2-digit'
   });
+  
+  const document = activity.metadata?.document as { name: string; url: string } | undefined;
 
   return (
     <div 
@@ -108,9 +110,25 @@ function ActivityItem({ activity, isNew }: { activity: Activity; isNew: boolean 
         
         <p className="text-sm text-muted-foreground mb-2">{activity.description}</p>
         
-        <Badge variant="secondary" className="text-xs">
-          {activityLabels[activity.type]}
-        </Badge>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge variant="secondary" className="text-xs">
+            {activityLabels[activity.type]}
+          </Badge>
+          
+          {document && (
+            <a 
+              href={document.url} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              data-testid={`doc-link-${activity.id}`}
+            >
+              <FileText className="w-3 h-3" />
+              {document.name}
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          )}
+        </div>
       </div>
       
       {isNew && (
