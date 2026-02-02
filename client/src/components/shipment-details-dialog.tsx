@@ -64,12 +64,14 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
 
         } else {
             // AR Logic
-            const hasLoadData = true; // Assuming exists
-            const loadedRateContract = activities.some(a => a.title.includes('Rate Contract'));
-            const calculatedCharge = activities.some(a => a.title.includes('Charge Calculated') || shipment.invoiceAmount > 0);
-            const foundAccessorials = activities.some(a => a.title.includes('Accessorial'));
-            const builtPacket = activities.some(a => a.title.includes('Packet'));
             const sent = shipment.arStatus === 'submitted' || shipment.arStatus === 'collected';
+
+            // If sent, everything is completed by definition
+            const hasLoadData = sent || true;
+            const loadedRateContract = sent || activities.some(a => a.title.includes('Rate Contract'));
+            const calculatedCharge = sent || activities.some(a => a.title.includes('Charge Calculated') || shipment.invoiceAmount > 0);
+            const foundAccessorials = sent || activities.some(a => a.title.includes('Accessorial'));
+            const builtPacket = sent || activities.some(a => a.title.includes('Packet'));
 
             items.push({ id: 'ar-1', label: 'Collecting load data', status: hasLoadData ? 'completed' : 'in-progress' });
             items.push({ id: 'ar-2', label: 'Loading rate contract', status: loadedRateContract ? 'completed' : 'in-progress' });
