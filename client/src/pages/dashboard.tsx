@@ -9,6 +9,8 @@ import { ShipmentTable } from "@/components/shipment-table";
 import { StatusFilters } from "@/components/status-filters";
 import { ChatInterface } from "@/components/chat-interface";
 import { ShipmentDetailsDialog } from "@/components/shipment-details-dialog";
+import { EmailApprovalDialog } from "@/components/email-approval-dialog";
+import { DocumentVerificationDialog } from "@/components/document-verification-dialog";
 import type { Shipment, Activity, APStatus, ARStatus, SimulationState } from "@shared/schema";
 
 const INITIAL_SHIPMENTS: Shipment[] = [
@@ -54,7 +56,7 @@ const INITIAL_SHIPMENTS: Shipment[] = [
   }
 ];
 
-import { EmailApprovalDialog } from "@/components/email-approval-dialog";
+
 
 interface SimStep {
   delay: number;
@@ -64,6 +66,7 @@ interface SimStep {
   status: APStatus | ARStatus;
   document?: { name: string; url: string };
   requiresApproval?: boolean;
+  pendingActionType?: 'approve_email' | 'verify_docs';
   draftContent?: {
     to: string;
     subject: string;
@@ -76,8 +79,11 @@ const createAPSteps = (shipment: Shipment, currentActivities: Activity[] = []): 
   const hasBOL = currentActivities.some(a => a.metadata?.document?.name === "Bill of Lading");
   const hasPOD = currentActivities.some(a => a.metadata?.document?.name === "Proof of Delivery");
   const hasInvoice = currentActivities.some(a => a.metadata?.document?.name === "Carrier Invoice");
+  const hasDocRequest = currentActivities.some(a => a.title.includes("Drafting Document Request"));
 
-  const needsDocRequest = !hasBOL || !hasPOD || !hasInvoice;
+  // Keep request steps in the array if they were already generated/executed (hasDocRequest)
+  // regardless of whether we now have the docs. This preserves array indices.
+  const needsDocRequest = (!hasBOL || !hasPOD || !hasInvoice) || hasDocRequest;
 
   return [
     {
@@ -86,7 +92,7 @@ const createAPSteps = (shipment: Shipment, currentActivities: Activity[] = []): 
       title: `Delivery Confirmation - ${shipment.shipmentNumber}`,
       description: `Email from ${shipment.carrier} confirming delivery to ${shipment.destination}`,
       status: "received" as APStatus,
-      document: { name: "Carrier Invoice", url: "/demo/documents/04_carrier_invoice.pdf" }
+      document: { name: "Delivery Email", url: "/demo/emails/email_01_carrier_delivery_complete.pdf" }
     },
     ...(needsDocRequest ? [
       {
@@ -115,7 +121,7 @@ const createAPSteps = (shipment: Shipment, currentActivities: Activity[] = []): 
         title: `Documents Received - ${shipment.shipmentNumber}`,
         description: `${shipment.carrier} submitted missing document(s)`,
         status: "in_review" as APStatus,
-        document: { name: "Carrier Invoice Email", url: "/demo/emails/email_02_carrier_invoice_submission.pdf" }
+        document: { name: "Missing Documents Email", url: "/demo/emails/email_02_carrier_invoice_submission.pdf" }
       }
     ] : []),
     {
@@ -185,6 +191,30 @@ const createAPSteps = (shipment: Shipment, currentActivities: Activity[] = []): 
         title: `Detention Docs Received - ${shipment.shipmentNumber}`,
         description: `${shipment.carrier} provided gate log and ELD report for detention claim`,
         status: "in_review" as APStatus
+      },
+      {
+        delay: 500,
+        type: "document_scanned" as const,
+        title: "Gate Log Received",
+        description: "Gate Log showing check-in/out times",
+        status: "in_review" as APStatus,
+        document: { name: "Gate Log.pdf", url: "/demo/documents/gate_log.pdf" }
+      },
+      {
+        delay: 500,
+        type: "document_scanned" as const,
+        title: "ELD Report Received",
+        description: "Driver ELD logs verifying wait time",
+        status: "in_review" as APStatus,
+        document: { name: "ELD Report.pdf", url: "/demo/documents/eld_report.pdf" }
+      },
+
+      {
+        delay: 500,
+        type: "issue_resolved" as const, // Or keep generic if type not supported, but title is key
+        title: "Detention Verified - Valid Gate Log & ELD",
+        description: "Detention charges verified against carrier documentation",
+        status: "audit_pass" as APStatus
       },
       {
         delay: 2000,
@@ -315,7 +345,8 @@ export default function Dashboard() {
   const [arFilter, setArFilter] = useState<ARStatus | "all">("all");
   const [completedAPShipments, setCompletedAPShipments] = useState<Set<string>>(new Set());
   const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
-  const [draftToApprove, setDraftToApprove] = useState<string | null>(null);
+  const [draftToApprove, setDraftToApprove] = useState<string | null>(null); // shipmentId
+  const [docsToVerify, setDocsToVerify] = useState<string | null>(null); // shipmentId
   const [activeShipmentSteps, setActiveShipmentSteps] = useState<Record<string, number>>({});
   const [pendingDrafts, setPendingDrafts] = useState<Record<string, SimStep['draftContent']>>({});
   const timeoutRefs = useRef<NodeJS.Timeout[]>([]);
@@ -399,24 +430,30 @@ export default function Dashboard() {
 
     const timeout = setTimeout(() => {
       // If this step requires approval, pause here
-      if (step.requiresApproval && step.draftContent) {
-        setPendingDrafts(prev => ({ ...prev, [shipment.id]: step.draftContent }));
+      if (step.requiresApproval) {
+        if (step.draftContent) {
+          setPendingDrafts(prev => ({ ...prev, [shipment.id]: step.draftContent! }));
+        }
 
-        // Add the "Draft created" activity
-        const draftActivity: Activity = {
+        // Add the pending activity
+        const pendingActivity: Activity = {
           id: `ap-${shipment.id}-${Date.now()}-${stepIndex}`,
           shipmentId: shipment.id,
-          type: "email_draft",
+          type: step.type,
           category: "ap",
           title: step.title,
           description: step.description,
           timestamp: new Date(),
           metadata: { pendingAction: true }
         };
-        setActivities(prev => [draftActivity, ...prev]);
+        setActivities(prev => [pendingActivity, ...prev]);
 
         setShipments(prev => prev.map(s =>
-          s.id === shipment.id ? { ...s, apStatus: "input_required", pendingAction: "approve_email" } : s
+          s.id === shipment.id ? {
+            ...s,
+            apStatus: "input_required",
+            pendingAction: step.pendingActionType || "approve_email"
+          } : s
         ));
 
         // Do NOT process next step automatically - PAUSE
@@ -456,7 +493,7 @@ export default function Dashboard() {
     timeoutRefs.current.push(timeout);
   }, [runARForShipment]);
 
-  const handleApproveDraft = (shipmentId: string) => {
+  const handleApproveAction = (shipmentId: string) => {
     const shipment = shipments.find(s => s.id === shipmentId);
     if (!shipment) return;
 
@@ -841,22 +878,44 @@ export default function Dashboard() {
         activities={activities}
         open={!!selectedShipment}
         onOpenChange={(open: boolean) => !open && setSelectedShipment(null)}
-        onAction={(shipmentId: string) => setDraftToApprove(shipmentId)}
+        onAction={(shipmentId: string) => {
+          const shipment = shipments.find(s => s.id === shipmentId);
+          if (shipment?.pendingAction === 'verify_docs') {
+            setDocsToVerify(shipmentId);
+          } else {
+            setDraftToApprove(shipmentId);
+          }
+        }}
         context={activeTab}
+      />
+
+      <DocumentVerificationDialog
+        open={!!docsToVerify}
+        onOpenChange={(open: boolean) => !open && setDocsToVerify(null)}
+        documents={docsToVerify ? activities
+          .filter(a => a.shipmentId === docsToVerify && a.metadata?.document)
+          .filter(a => {
+            const name = a.metadata!.document!.name.toLowerCase();
+            return name.includes('gate') || name.includes('eld') || name.includes('log') || name.includes('detention');
+          })
+          .map(a => ({ name: a.metadata!.document!.name, url: a.metadata!.document!.url }))
+          : []
+        }
+        onApprove={() => {
+          if (docsToVerify) {
+            handleApproveAction(docsToVerify);
+            setDocsToVerify(null);
+          }
+        }}
       />
 
       <EmailApprovalDialog
         open={!!draftToApprove}
         onOpenChange={(open: boolean) => !open && setDraftToApprove(null)}
-        /* 
-          Actually, we need to know WHICH draft we are approving. 
-          If handling from ActivityStream action, we need a way to open this dialog.
-          Let's add a specialized state for "draftToApprove" {shipmentId, draft}
-        */
         draft={draftToApprove ? (pendingDrafts[draftToApprove] || null) : null}
         onApprove={() => {
           if (draftToApprove) {
-            handleApproveDraft(draftToApprove);
+            handleApproveAction(draftToApprove);
             setDraftToApprove(null);
           }
         }}

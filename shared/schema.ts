@@ -53,7 +53,7 @@ export const shipmentSchema = z.object({
   apStatus: apStatusSchema,
   arStatus: arStatusSchema,
   createdAt: z.date(),
-  pendingAction: z.enum(["approve_email"]).optional()
+  pendingAction: z.enum(["approve_email", "verify_docs"]).optional()
 });
 
 export type Shipment = z.infer<typeof shipmentSchema>;

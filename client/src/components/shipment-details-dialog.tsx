@@ -18,7 +18,7 @@ interface ShipmentDetailsDialogProps {
     context?: 'ap' | 'ar';
 }
 
-type ChecklistItemStatus = 'pending' | 'in-progress' | 'completed';
+type ChecklistItemStatus = 'pending' | 'in-progress' | 'completed' | 'issue' | 'action_required';
 
 interface ChecklistItem {
     id: string;
@@ -29,7 +29,7 @@ interface ChecklistItem {
 interface GroupedActivity {
     id: string;
     title: string;
-    status: 'completed' | 'in-progress' | 'pending' | 'error';
+    status: 'completed' | 'in-progress' | 'pending' | 'error' | 'action_required';
     timestamp: Date;
     traces: Activity[];
     description?: string;
@@ -50,35 +50,88 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
 
         if (context === 'ap') {
             // AP Logic
-            const hasLoadData = true; // Shipment exists, so load data is effectively valid
+            const hasLoadData = true; // Always true if viewing details
             const ratesValidated = activities.some(a => a.title.includes('Rate Con Verified') || shipment.apStatus === 'audit_pass' || shipment.apStatus === 'paid');
-            const accessorialsChecked = activities.some(a => a.title.includes('Accessorial') || shipment.detentionCharge !== null);
-            const evidencesChecked = activities.some(a => a.metadata?.document); // Simplified check
-            const isDone = shipment.apStatus === 'audit_pass' || shipment.apStatus === 'paid';
 
-            items.push({ id: 'ap-1', label: 'Validating load data', status: hasLoadData ? 'completed' : 'in-progress' }); // Assuming always started if viewing
-            items.push({ id: 'ap-2', label: 'Validating rates', status: ratesValidated ? 'completed' : (hasLoadData ? 'in-progress' : 'pending') });
-            items.push({ id: 'ap-3', label: 'Checking accessorials', status: accessorialsChecked ? 'completed' : (ratesValidated ? 'in-progress' : 'pending') });
-            items.push({ id: 'ap-4', label: 'Checking evidences', status: evidencesChecked ? 'completed' : (accessorialsChecked ? 'in-progress' : 'pending') });
-            items.push({ id: 'ap-5', label: 'Done', status: isDone ? 'completed' : (evidencesChecked ? 'in-progress' : 'pending') });
+            // Accessorials checked:
+            // 1. If no detention charge, it passes logic (skipped/auto-approved).
+            // 2. If detention charge exists, it MUST have detention-specific verification activities (ELD or Gate Log).
+            // NOTE: Do NOT bypass this check based on apStatus - detention must be resolved first.
+            // NOTE: If there's a pending action (e.g. draft to review), detention is NOT verified yet.
+            const hasDetention = (shipment.detentionCharge ?? 0) > 0;
+            const detentionVerified = !shipment.pendingAction && activities.some(a =>
+                (a.title.includes('ELD') || a.title.includes('Gate Log') || a.title.includes('Detention')) &&
+                (a.title.includes('Verified') || a.title.includes('Resolved'))
+            );
+            const accessorialsChecked = !hasDetention || detentionVerified;
+
+            const evidencesChecked = activities.some(a => a.metadata?.document); // Simplified check
+
+            // Done: Strict check. Must be audit_pass or paid AND if detention existed, it must be resolved.
+            // (The status check usually covers it, but let's be safe).
+            const isDone = (shipment.apStatus === 'audit_pass' || shipment.apStatus === 'paid') && accessorialsChecked;
+
+            // Sequential Logic Helper
+            // Item N is 'in-progress' only if Item N-1 is 'completed'.
+            // Item N is 'completed' if the condition is met.
+
+            const check1 = hasLoadData;
+            const check2 = check1 && (ratesValidated || isDone);
+            // Crucial: check3 (Accessorials) won't complete if detention exists but isn't verified.
+            const check3 = check2 && accessorialsChecked;
+            const check4 = check3 && (evidencesChecked || isDone);
+            const check5 = isDone;
+
+            const getStatus = (isCompleted: boolean, previousCompleted: boolean): ChecklistItemStatus => {
+                if (isCompleted) return 'completed';
+                if (previousCompleted) {
+                    if (shipment.apStatus === 'in_dispute') return 'issue';
+                    if (shipment.apStatus === 'input_required') return 'action_required';
+                    return 'in-progress';
+                }
+                return 'pending';
+            };
+
+            items.push({ id: 'ap-1', label: 'Validating load data', status: getStatus(check1, true) });
+            items.push({ id: 'ap-2', label: 'Validating rates', status: getStatus(check2, check1) });
+            items.push({ id: 'ap-3', label: 'Checking accessorials', status: getStatus(check3, check2) });
+            items.push({ id: 'ap-4', label: 'Checking evidences', status: getStatus(check4, check3) });
+            items.push({ id: 'ap-5', label: 'Done', status: getStatus(check5, check4) });
 
         } else {
             // AR Logic
             const sent = shipment.arStatus === 'submitted' || shipment.arStatus === 'collected';
 
+            const hasLoadData = true; // Always start here
             // Tie logic strictly to activities or final status
-            const hasLoadData = sent || activities.some(a => a.category === 'ar' && a.title.includes('AR Job Opened'));
             const loadedRateContract = sent || activities.some(a => a.category === 'ar' && (a.title.includes('Agreement') || a.title.includes('Contract')));
             const calculatedCharge = sent || activities.some(a => a.category === 'ar' && a.type === 'invoice_created');
-            const foundAccessorials = sent || activities.some(a => a.category === 'ar' && a.title.includes('Evidence')); // "Evidence Packet Ready" implies accessorials checked
+            const foundAccessorials = sent || activities.some(a => a.category === 'ar' && a.title.includes('Evidence'));
             const builtPacket = sent || activities.some(a => a.category === 'ar' && (a.title.includes('Packet') || a.title.includes('Drafting')));
 
-            items.push({ id: 'ar-1', label: 'Collecting load data', status: hasLoadData ? 'completed' : 'in-progress' });
-            items.push({ id: 'ar-2', label: 'Loading rate contract', status: loadedRateContract ? 'completed' : (hasLoadData ? 'in-progress' : 'pending') });
-            items.push({ id: 'ar-3', label: 'Calculating rate charge', status: calculatedCharge ? 'completed' : (loadedRateContract ? 'in-progress' : 'pending') });
-            items.push({ id: 'ar-4', label: 'Finding accessorials', status: foundAccessorials ? 'completed' : (calculatedCharge ? 'in-progress' : 'pending') });
-            items.push({ id: 'ar-5', label: 'Building evidence packet', status: builtPacket ? 'completed' : (foundAccessorials ? 'in-progress' : 'pending') });
-            items.push({ id: 'ar-6', label: 'Send', status: sent ? 'completed' : (builtPacket ? 'in-progress' : 'pending') });
+            const check1 = hasLoadData;
+            const check2 = check1 && loadedRateContract;
+            const check3 = check2 && calculatedCharge;
+            const check4 = check3 && (foundAccessorials || true); // Accessorials optional in AR flow often, but let's keep sequence
+            const check5 = check4 && builtPacket;
+            const check6 = sent;
+
+            const getStatus = (isCompleted: boolean, previousCompleted: boolean): ChecklistItemStatus => {
+                if (isCompleted) return 'completed';
+                if (previousCompleted) {
+                    if (shipment.arStatus === 'in_dispute') return 'issue';
+                    if (shipment.arStatus === 'input_required') return 'action_required';
+                    return 'in-progress';
+                }
+                return 'pending';
+            };
+
+            items.push({ id: 'ar-1', label: 'Collecting load data', status: getStatus(check1, true) });
+            items.push({ id: 'ar-2', label: 'Loading rate contract', status: getStatus(check2, check1) });
+            items.push({ id: 'ar-3', label: 'Calculating rate charge', status: getStatus(check3, check2) });
+            items.push({ id: 'ar-4', label: 'Finding accessorials', status: getStatus(check4, check3) });
+            items.push({ id: 'ar-5', label: 'Building evidence packet', status: getStatus(check5, check4) });
+            items.push({ id: 'ar-6', label: 'Send', status: getStatus(check6, check5) });
         }
         return items;
     };
@@ -96,59 +149,110 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
         // For this task, strict mapping based on the plan instructions:
 
         const mainCategories = [
-            { id: 'docs', keywords: ['Scanning', 'Verifying', 'OCR'], title: 'Processing Documents' },
-            { id: 'rates', keywords: ['Rate', 'Calculat', 'Stop-off'], title: 'Rate Validation' },
+            { id: 'processing', keywords: ['Scanning', 'Verifying', 'Verification', 'OCR', 'Rate', 'Calculat', 'Stop-off', 'Analyz', 'Validat', 'Verified', 'Confirm', 'Check'], title: 'Document Processing' },
+            { id: 'detention', keywords: ['Gate Log', 'ELD', 'Detention'], title: 'Detention Issue' },
             { id: 'evidence', keywords: ['Evidence', 'Packet', 'Generating'], title: 'Evidence Building' },
             { id: 'other', keywords: [], title: 'Other Activity' }
         ];
 
-        // We will do a single pass to bucketize. 
-        // Since the requirement is "ephemeral reasoning traces", we want to show the Main Status as the primary item.
-
-        // Let's create buckets.
+        // Grouping
         const bucketMap: Record<string, GroupedActivity> = {};
 
         sorted.forEach(act => {
             let matchedCat = mainCategories.find(cat => cat.keywords.some(k => act.title.includes(k) || act.description?.includes(k)));
-            if (!matchedCat) matchedCat = mainCategories.find(c => c.id === 'other'); // Fallback
+            // Special casing: if email related, it might be 'other' or start of process
+            if (!matchedCat) matchedCat = mainCategories.find(c => c.id === 'other');
 
             if (matchedCat && matchedCat.id !== 'other') {
                 if (!bucketMap[matchedCat.id]) {
                     bucketMap[matchedCat.id] = {
                         id: matchedCat.id,
                         title: matchedCat.title,
-                        status: 'completed', // simplified default
+                        status: 'completed', // Default
                         timestamp: new Date(act.timestamp),
                         traces: [],
                         description: act.description
                     };
                 }
-                // Keep latest timestamp for the group
+                // Keep latest timestamp
                 if (new Date(act.timestamp) > bucketMap[matchedCat.id].timestamp) {
                     bucketMap[matchedCat.id].timestamp = new Date(act.timestamp);
                 }
                 bucketMap[matchedCat.id].traces.push(act);
             } else {
-                groups.push({
-                    id: act.id,
-                    title: act.title,
-                    status: act.type === 'issue_found' ? 'error' : 'completed',
-                    timestamp: new Date(act.timestamp),
-                    traces: [act], // It is its own trace
-                    description: act.description
-                });
+                // Should non-matches be their own group or lumped into "Other"?
+                // "Other" is cleaner for hierarchy unless it's a major milestone like "Payment Received".
+                // Let's keep major milestones separate if they don't match processing keywords.
+
+                // If it's a critical status change like "AP Audit Complete" or "Email Sent", maybe keep separate?
+                // NOTE: Detention-related issue_found activities should fall through to keyword matching to be grouped with detention
+                const isDetentionIssue = act.type === 'issue_found' && (act.title.includes('Detention') || act.description?.includes('Detention'));
+                if (!isDetentionIssue && (act.type === 'audit_complete' || act.type === 'payment_sent' || act.type === 'payment_received' || act.type === 'email_sent' || act.type === 'email_received' || act.type === 'issue_found' || act.type === 'email_draft' || act.type === 'approval_requested')) {
+                    const status: GroupedActivity['status'] = 'completed';
+                    // Drafts/Approvals are 'completed' by default (historical).
+                    // They will be promoted to 'action_required' only if they are the LATEST active step.
+
+                    groups.push({
+                        id: act.id,
+                        title: act.title,
+                        status: status,
+                        timestamp: new Date(act.timestamp),
+                        traces: [act],
+                        description: act.description
+                    });
+                } else if (isDetentionIssue) {
+                    // Detention issues go into the detention bucket
+                    if (!bucketMap['detention']) {
+                        bucketMap['detention'] = {
+                            id: 'detention',
+                            title: 'Detention Issue',
+                            status: 'action_required',
+                            timestamp: new Date(act.timestamp),
+                            traces: [],
+                            description: act.description
+                        };
+                    }
+                    if (new Date(act.timestamp) > bucketMap['detention'].timestamp) {
+                        bucketMap['detention'].timestamp = new Date(act.timestamp);
+                    }
+                    bucketMap['detention'].traces.push(act);
+                } else {
+                    // Fallback to 'other' bucket
+                    if (!bucketMap['other']) {
+                        bucketMap['other'] = {
+                            id: 'other',
+                            title: 'Other Activity',
+                            status: 'completed',
+                            timestamp: new Date(act.timestamp),
+                            traces: [],
+                            description: act.description
+                        };
+                    }
+                    if (new Date(act.timestamp) > bucketMap['other'].timestamp) {
+                        bucketMap['other'].timestamp = new Date(act.timestamp);
+                    }
+                    bucketMap['other'].traces.push(act);
+                }
             }
         });
 
-        // Add grouped buckets to the list
+        // Add grouped buckets to the list and refine titles/status
         Object.values(bucketMap).forEach(g => {
+            // Detention Issue status logic: orange until resolved, then green
+            if (g.id === 'detention') {
+                const isResolved = g.traces.some(t => t.title.includes("Verified") || t.title.includes("Resolved"));
+                g.status = isResolved ? 'completed' : 'action_required';
+                // Keep title as "Detention Issue" always
+                g.title = "Detention Issue";
+            }
+
             // Sort traces: Oldest first for sequential reasoning traces
             g.traces.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
             groups.push(g);
         });
 
-        // Re-sort everything by timestamp
-        return groups.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+        // Re-sort everything by timestamp (Oldest First)
+        return groups.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
     };
 
     const groupedActivities = groupActivities(activities.filter(a => a.shipmentId === shipment.id && (!context || a.category === context)));
@@ -158,14 +262,20 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
         ? (shipment.apStatus === 'audit_pass' || shipment.apStatus === 'paid')
         : (shipment.arStatus === 'submitted' || shipment.arStatus === 'collected');
 
-    // If shipment is not complete, the very first group (latest in time) is likely the "Active" one.
+    // If shipment is not complete, the LAST group (latest in time) is the "Active" one.
     if (!isShipmentComplete && groupedActivities.length > 0) {
-        groupedActivities[0].status = 'in-progress';
+        const lastIndex = groupedActivities.length - 1;
+
+        if (shipment.pendingAction) {
+            groupedActivities[lastIndex].status = 'action_required';
+        } else if (groupedActivities[lastIndex].status !== 'error') {
+            groupedActivities[lastIndex].status = 'in-progress';
+        }
     }
 
     // Extract documents (same as before logic, just helper now)
     const documents = activities
-        .filter(a => a.shipmentId === shipment.id && a.metadata?.document)
+        .filter(a => a.shipmentId === shipment.id && a.metadata?.document && (!context || a.category === context))
         .map(a => ({
             name: a.metadata!.document!.name,
             url: a.metadata!.document!.url,
@@ -221,6 +331,9 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
                                 <AlertCircle className="h-5 w-5" />
                                 <span className="font-medium">
                                     {(() => {
+                                        if (shipment.pendingAction === 'verify_docs') {
+                                            return "Action Required: Verify Detention Documents";
+                                        }
                                         // Find the activity that triggered this action
                                         const pendingActivity = activities.find(a => a.type === 'email_draft' && a.metadata?.pendingAction);
                                         if (!pendingActivity) return "Action Required: Email Draft Pending Review";
@@ -237,7 +350,7 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
                                 onClick={() => onAction?.(shipment.id)}
                                 className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors"
                             >
-                                Review Draft
+                                {shipment.pendingAction === 'verify_docs' ? 'Verify Documents' : 'Review Draft'}
                             </button>
                         </div>
                     </div>
@@ -273,6 +386,14 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
                                                 <div className="h-6 w-6 rounded-full border-2 border-primary bg-background flex items-center justify-center">
                                                     <Loader2 className="h-3 w-3 text-primary animate-spin" />
                                                 </div>
+                                            ) : item.status === 'issue' ? (
+                                                <div className="h-6 w-6 rounded-full bg-destructive flex items-center justify-center text-destructive-foreground">
+                                                    <AlertCircle className="h-4 w-4" />
+                                                </div>
+                                            ) : item.status === 'action_required' ? (
+                                                <div className="h-6 w-6 rounded-full bg-orange-500 flex items-center justify-center text-white">
+                                                    <AlertCircle className="h-4 w-4" />
+                                                </div>
                                             ) : (
                                                 <div className="h-6 w-6 rounded-full border-2 border-muted bg-muted/50" />
                                             )}
@@ -280,12 +401,21 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
                                         <div>
                                             <p className={cn(
                                                 "text-sm font-medium leading-none mb-1 pt-1.5",
-                                                item.status === 'pending' ? "text-muted-foreground" : "text-foreground"
+                                                item.status === 'pending' ? "text-muted-foreground" :
+                                                    item.status === 'issue' ? "text-destructive" :
+                                                        item.status === 'action_required' ? "text-orange-600" :
+                                                            "text-foreground"
                                             )}>
                                                 {item.label}
                                             </p>
                                             {item.status === 'in-progress' && (
                                                 <p className="text-xs text-muted-foreground">Currently processing...</p>
+                                            )}
+                                            {item.status === 'issue' && (
+                                                <p className="text-xs text-destructive font-medium">Issue Detected</p>
+                                            )}
+                                            {item.status === 'action_required' && (
+                                                <p className="text-xs text-orange-600 font-medium">Action Required</p>
                                             )}
                                         </div>
                                     </div>
@@ -409,14 +539,21 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
                                                 <div className={cn(
                                                     "absolute -left-[31px] top-1.5 h-4 w-4 rounded-full border-2 transition-colors flex items-center justify-center",
                                                     group.status === 'error' ? 'border-destructive bg-destructive' :
-                                                        group.status === 'completed' ? 'border-green-500 bg-green-500' :
-                                                            'border-primary bg-background'
+                                                        group.status === 'action_required' ? 'border-orange-500 bg-orange-500' :
+                                                            group.status === 'completed' ? 'border-green-500 bg-green-500' :
+                                                                'border-primary bg-background'
                                                 )}>
                                                     {group.status === 'in-progress' && (
                                                         <Loader2 className="h-2.5 w-2.5 text-primary animate-spin" />
                                                     )}
                                                     {group.status === 'completed' && (
                                                         <Check className="h-2.5 w-2.5 text-white" />
+                                                    )}
+                                                    {group.status === 'action_required' && (
+                                                        <AlertCircle className="h-2.5 w-2.5 text-white" />
+                                                    )}
+                                                    {group.status === 'error' && (
+                                                        <AlertCircle className="h-2.5 w-2.5 text-white" />
                                                     )}
                                                 </div>
 
@@ -429,7 +566,8 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
                                                         <div className="flex items-center gap-2">
                                                             <span className={cn(
                                                                 "text-sm font-medium",
-                                                                group.status === 'error' ? 'text-destructive' : ''
+                                                                group.status === 'error' ? 'text-destructive' :
+                                                                    group.status === 'action_required' ? 'text-orange-600' : ''
                                                             )}>
                                                                 {group.title}
                                                             </span>
