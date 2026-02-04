@@ -409,11 +409,13 @@ export default function Dashboard() {
     currentPhase: "idle",
     currentStep: 0
   });
+  const [autonomyMode, setAutonomyMode] = useState<"semi" | "full">("semi");
   const [activities, setActivities] = useState<Activity[]>([]);
   const [shipments, setShipments] = useState<Shipment[]>(INITIAL_SHIPMENTS);
 
   const activitiesRef = useRef<Activity[]>(activities);
   const shipmentsRef = useRef<Shipment[]>(shipments);
+  const autonomyModeRef = useRef<"semi" | "full">(autonomyMode);
 
   useEffect(() => {
     activitiesRef.current = activities;
@@ -422,6 +424,10 @@ export default function Dashboard() {
   useEffect(() => {
     shipmentsRef.current = shipments;
   }, [shipments]);
+
+  useEffect(() => {
+    autonomyModeRef.current = autonomyMode;
+  }, [autonomyMode]);
   const [apFilter, setApFilter] = useState<APStatus | "all">("all");
   const [arFilter, setArFilter] = useState<ARStatus | "all">("all");
   const [completedAPShipments, setCompletedAPShipments] = useState<Set<string>>(new Set());
@@ -449,8 +455,9 @@ export default function Dashboard() {
     const step = arSteps[stepIndex];
 
     const timeout = setTimeout(() => {
+      const shouldPauseForApproval = step.requiresApproval && autonomyModeRef.current !== "full";
       // If this step requires approval, pause here
-      if (step.requiresApproval && step.draftContent) {
+      if (shouldPauseForApproval && step.draftContent) {
         setPendingDrafts(prev => ({ ...prev, [shipment.id]: step.draftContent }));
 
         // Add the "Draft created" activity
@@ -510,8 +517,9 @@ export default function Dashboard() {
     const step = apSteps[stepIndex];
 
     const timeout = setTimeout(() => {
+      const shouldPauseForApproval = step.requiresApproval && autonomyModeRef.current !== "full";
       // If this step requires approval, pause here
-      if (step.requiresApproval) {
+      if (shouldPauseForApproval) {
         if (step.draftContent) {
           setPendingDrafts(prev => ({ ...prev, [shipment.id]: step.draftContent! }));
         }
@@ -637,7 +645,7 @@ export default function Dashboard() {
     timeoutRefs.current.push(timeout);
   }, [runARForShipment]);
 
-  const handleApproveAction = (shipmentId: string) => {
+  const handleApproveAction = useCallback((shipmentId: string) => {
     const shipment = shipments.find(s => s.id === shipmentId);
     if (!shipment) return;
 
@@ -673,7 +681,18 @@ export default function Dashboard() {
       // Resume AP
       runAPForShipment(shipment, currentIndex + 1);
     }
-  };
+  }, [shipments, activeShipmentSteps, completedAPShipments, runARForShipment, runAPForShipment]);
+
+  useEffect(() => {
+    if (autonomyMode !== "full") return;
+    const pendingIds = shipments.filter(s => s.pendingAction).map(s => s.id);
+    if (pendingIds.length === 0) return;
+
+    setDraftToApprove(null);
+    setDocsToVerify(null);
+
+    pendingIds.forEach(handleApproveAction);
+  }, [autonomyMode, shipments, handleApproveAction]);
 
   const startSimulation = useCallback(() => {
     clearTimeouts();
@@ -728,7 +747,7 @@ export default function Dashboard() {
 
     shipments.forEach(shipment => {
       // Don't resume shipments that are stuck on approval
-      if (shipment.pendingAction === 'approve_email') return;
+      if (autonomyMode !== "full" && shipment.pendingAction) return;
 
       const currentIndex = activeShipmentSteps[shipment.id];
       const isAPComplete = completedAPShipments.has(shipment.id);
@@ -745,7 +764,7 @@ export default function Dashboard() {
         runAPForShipment(shipment, 0);
       }
     });
-  }, [shipments, activeShipmentSteps, completedAPShipments, runAPForShipment, runARForShipment, simulation.currentPhase]);
+  }, [autonomyMode, shipments, activeShipmentSteps, completedAPShipments, runAPForShipment, runARForShipment, simulation.currentPhase]);
 
   const toggleSimulation = useCallback(() => {
     if (simulation.isRunning) {
@@ -840,6 +859,32 @@ export default function Dashboard() {
                     simulation.currentPhase === "complete" ? "Complete" :
                       simulation.isRunning ? `Processing ${shipments.length} Shipments` : "Paused"}
                 </span>
+              </div>
+
+              <div className="flex items-center gap-2 rounded-lg border bg-background/60 px-2 py-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Autonomy</span>
+                <div className="flex items-center rounded-md bg-muted p-0.5">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={autonomyMode === "semi" ? "secondary" : "ghost"}
+                    aria-pressed={autonomyMode === "semi"}
+                    onClick={() => setAutonomyMode("semi")}
+                    data-testid="button-autonomy-semi"
+                  >
+                    Semi
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={autonomyMode === "full" ? "secondary" : "ghost"}
+                    aria-pressed={autonomyMode === "full"}
+                    onClick={() => setAutonomyMode("full")}
+                    data-testid="button-autonomy-full"
+                  >
+                    Full
+                  </Button>
+                </div>
               </div>
 
               {!simulation.isRunning && (simulation.currentPhase === "idle" || simulation.currentPhase === "complete") && (
@@ -1070,4 +1115,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
