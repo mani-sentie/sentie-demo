@@ -11,8 +11,31 @@ import { ChatInterface } from "@/components/chat-interface";
 import { ShipmentDetailsDialog } from "@/components/shipment-details-dialog";
 import { EmailApprovalDialog } from "@/components/email-approval-dialog";
 import { DocumentVerificationDialog } from "@/components/document-verification-dialog";
-import type { Shipment, Activity, APStatus, ARStatus, SimulationState } from "@shared/schema";
+import type { Shipment, Activity, APStatus, ARStatus, SimulationState, APInvoice, APInvoiceStatus } from "@shared/schema";
 
+// Invoice templates - these represent invoices that will arrive during simulation
+// Keyed by shipment ID for easy lookup
+const INVOICE_TEMPLATES: Record<string, APInvoice[]> = {
+  "SHP-001": [
+    { id: "INV-001-C", type: "carrier", vendor: "DESERT HAULERS TRUCKING INC", invoiceNumber: "DH-2026-4821", amount: 2850, detentionCharge: 300, status: "received", documentUrl: "/demo/documents/04_carrier_invoice.pdf", createdAt: new Date() },
+    { id: "INV-001-X", type: "customs", vendor: "Pacific Customs Services", invoiceNumber: "INV-2026-CB-0847", amount: 800, status: "pending", documentUrl: "/demo/documents/10_customs_broker_invoice.html", createdAt: new Date() },
+    { id: "INV-001-W", type: "warehouse", vendor: "Phoenix Logistics Center", invoiceNumber: "INV-WH-2026-3847", amount: 250, status: "pending", documentUrl: "/demo/documents/11_warehouse_invoice.html", createdAt: new Date() }
+  ],
+  "SHP-002": [
+    { id: "INV-002-C", type: "carrier", vendor: "Prime Freight", invoiceNumber: "PF-48821", amount: 1950, status: "received", documentUrl: "/demo/documents/04_carrier_invoice.pdf", createdAt: new Date() }
+  ],
+  "SHP-003": [
+    { id: "INV-003-C", type: "carrier", vendor: "Northwest Haulers", invoiceNumber: "NWH-2026-1122", amount: 2200, status: "received", documentUrl: "/demo/documents/04_carrier_invoice.pdf", createdAt: new Date() },
+    { id: "INV-003-W", type: "warehouse", vendor: "Seattle Distribution Hub", invoiceNumber: "SDH-8844", amount: 175, status: "pending", documentUrl: "/demo/documents/11_warehouse_invoice.html", createdAt: new Date() }
+  ]
+};
+
+// Helper to get invoice template by shipment ID and type
+const getInvoiceTemplate = (shipmentId: string, type: 'carrier' | 'customs' | 'warehouse'): APInvoice | undefined => {
+  return INVOICE_TEMPLATES[shipmentId]?.find(inv => inv.type === type);
+};
+
+// Initial shipments - start with empty apInvoices, invoices arrive during simulation
 const INITIAL_SHIPMENTS: Shipment[] = [
   {
     id: "SHP-001",
@@ -22,8 +45,8 @@ const INITIAL_SHIPMENTS: Shipment[] = [
     carrier: "DESERT HAULERS TRUCKING INC",
     shipper: "PACIFIC RIM IMPORTS INC",
     laneRate: 2850,
-    invoiceAmount: 3150,
-    detentionCharge: 300,
+    apInvoices: [], // Empty - will be populated during simulation
+    arInvoiceAmount: 4500,
     apStatus: "received",
     arStatus: "preparing",
     createdAt: new Date()
@@ -36,7 +59,8 @@ const INITIAL_SHIPMENTS: Shipment[] = [
     carrier: "Prime Freight",
     shipper: "GlobalMart Inc",
     laneRate: 1950,
-    invoiceAmount: 1950,
+    apInvoices: [], // Empty - will be populated during simulation
+    arInvoiceAmount: 2350,
     apStatus: "received",
     arStatus: "preparing",
     createdAt: new Date(Date.now() - 1000)
@@ -49,12 +73,23 @@ const INITIAL_SHIPMENTS: Shipment[] = [
     carrier: "Northwest Haulers",
     shipper: "EcoProducts Ltd",
     laneRate: 2200,
-    invoiceAmount: 2200,
+    apInvoices: [], // Empty - will be populated during simulation
+    arInvoiceAmount: 2800,
     apStatus: "received",
     arStatus: "preparing",
     createdAt: new Date(Date.now() - 2000)
   }
 ];
+
+// Helper to get carrier invoice from a shipment
+const getCarrierInvoice = (shipment: Shipment): APInvoice | undefined => {
+  return shipment.apInvoices.find(inv => inv.type === 'carrier');
+};
+
+// Helper to calculate total AP amount
+const getTotalAPAmount = (invoices: APInvoice[]): number => {
+  return invoices.reduce((sum, inv) => sum + inv.amount + (inv.detentionCharge || 0), 0);
+};
 
 
 
@@ -81,9 +116,20 @@ const createAPSteps = (shipment: Shipment, currentActivities: Activity[] = []): 
   const hasInvoice = currentActivities.some(a => a.metadata?.document?.name === "Carrier Invoice");
   const hasDocRequest = currentActivities.some(a => a.title.includes("Drafting Document Request"));
 
+  // Use INVOICE_TEMPLATES to get expected invoice info (since apInvoices starts empty)
+  const invoiceTemplates = INVOICE_TEMPLATES[shipment.id] || [];
+  const carrierTemplate = invoiceTemplates.find(inv => inv.type === 'carrier');
+  const detentionCharge = carrierTemplate?.detentionCharge || 0;
+  const carrierInvoiceAmount = carrierTemplate ? (carrierTemplate.amount + detentionCharge) : shipment.laneRate;
+  const totalAPAmount = invoiceTemplates.reduce((sum, inv) => sum + inv.amount + (inv.detentionCharge || 0), 0);
+
   // Keep request steps in the array if they were already generated/executed (hasDocRequest)
   // regardless of whether we now have the docs. This preserves array indices.
   const needsDocRequest = (!hasBOL || !hasPOD || !hasInvoice) || hasDocRequest;
+
+  // Get non-carrier invoices from templates for additional processing
+  const customsInvoice = invoiceTemplates.find(inv => inv.type === 'customs');
+  const warehouseInvoice = invoiceTemplates.find(inv => inv.type === 'warehouse');
 
   return [
     {
@@ -151,17 +197,17 @@ const createAPSteps = (shipment: Shipment, currentActivities: Activity[] = []): 
     {
       delay: 2000,
       type: "document_scanned",
-      title: `Invoice Analysis - ${shipment.shipmentNumber}`,
-      description: `Invoice for $${shipment.invoiceAmount.toLocaleString()} detected${shipment.detentionCharge ? ` (includes $${shipment.detentionCharge} detention)` : ''}`,
+      title: `Carrier Invoice Analysis - ${shipment.shipmentNumber}`,
+      description: `Carrier invoice for $${carrierInvoiceAmount.toLocaleString()} detected${detentionCharge ? ` (includes $${detentionCharge} detention)` : ''}`,
       status: "in_review" as APStatus,
-      document: { name: "Carrier Invoice", url: "/demo/documents/04_carrier_invoice.pdf" }
+      document: { name: "Carrier Invoice", url: carrierTemplate?.documentUrl || "/demo/documents/04_carrier_invoice.pdf" }
     },
-    ...(shipment.detentionCharge ? [
+    ...(detentionCharge ? [
       {
         delay: 2000,
         type: "issue_found" as const,
         title: `Detention Issue - ${shipment.shipmentNumber}`,
-        description: `Carrier claims $${shipment.detentionCharge} detention but no supporting documentation provided`,
+        description: `Carrier claims $${detentionCharge} detention but no supporting documentation provided`,
         status: "in_dispute" as APStatus
       },
       {
@@ -174,7 +220,7 @@ const createAPSteps = (shipment: Shipment, currentActivities: Activity[] = []): 
         draftContent: {
           to: "dtorres@deserthaulers.com",
           subject: `Detention Documentation Request - ${shipment.shipmentNumber}`,
-          body: `Hello,\n\n regarding shipment ${shipment.shipmentNumber}, we have received a detention charge of $${shipment.detentionCharge}. \n\nPlease provide the following documentation to substantiate this claim:\n${hasBOL ? '' : '1. Signed Bill of Lading with in/out times\n'}2. GPS/ELD report showing arrival and departure times\n\nThank you,\nSentie`
+          body: `Hello,\n\n regarding shipment ${shipment.shipmentNumber}, we have received a detention charge of $${detentionCharge}. \n\nPlease provide the following documentation to substantiate this claim:\n${hasBOL ? '' : '1. Signed Bill of Lading with in/out times\n'}2. GPS/ELD report showing arrival and departure times\n\nThank you,\nSentie`
         }
       },
       {
@@ -214,7 +260,7 @@ const createAPSteps = (shipment: Shipment, currentActivities: Activity[] = []): 
         type: "issue_resolved" as const, // Or keep generic if type not supported, but title is key
         title: "Detention Verified - Valid Gate Log & ELD",
         description: "Detention charges verified against carrier documentation",
-        status: "audit_pass" as APStatus
+        status: "in_review" as APStatus
       },
       {
         delay: 2000,
@@ -232,93 +278,128 @@ const createAPSteps = (shipment: Shipment, currentActivities: Activity[] = []): 
         status: "in_review" as APStatus,
         document: { name: "ELD Report", url: "/demo/documents/09_eld_report.pdf" }
       },
+    ] : []),
+    // Process additional AP invoices (customs, warehouse)
+    ...(customsInvoice ? [
       {
         delay: 2000,
-        type: "audit_complete" as const,
-        title: `AP Audit Complete - ${shipment.shipmentNumber}`,
-        description: `All documents verified. Invoice $${shipment.invoiceAmount.toLocaleString()} approved for payment.`,
-        status: "audit_pass" as APStatus
+        type: "document_scanned" as const,
+        title: `Customs Invoice Received - ${shipment.shipmentNumber}`,
+        description: `Invoice from ${customsInvoice.vendor} for $${customsInvoice.amount.toLocaleString()} - customs clearance fees`,
+        status: "in_review" as APStatus,
+        document: { name: "Customs Broker Invoice", url: customsInvoice.documentUrl || "/demo/documents/10_customs_broker_invoice.html" }
       },
-    ] : [
+      {
+        delay: 1500,
+        type: "document_scanned" as const,
+        title: `Customs Invoice Verified - ${shipment.shipmentNumber}`,
+        description: `Customs broker fees validated against entry documentation`,
+        status: "in_review" as APStatus
+      },
+    ] : []),
+    ...(warehouseInvoice ? [
       {
         delay: 2000,
-        type: "audit_complete" as const,
-        title: `AP Audit Complete - ${shipment.shipmentNumber}`,
-        description: `All documents verified. Invoice $${shipment.invoiceAmount.toLocaleString()} approved for payment.`,
-        status: "audit_pass" as APStatus
+        type: "document_scanned" as const,
+        title: `Warehouse Invoice Received - ${shipment.shipmentNumber}`,
+        description: `Invoice from ${warehouseInvoice.vendor} for $${warehouseInvoice.amount.toLocaleString()} - handling & storage`,
+        status: "in_review" as APStatus,
+        document: { name: "Warehouse Invoice", url: warehouseInvoice.documentUrl || "/demo/documents/11_warehouse_invoice.html" }
       },
-    ])
+      {
+        delay: 1500,
+        type: "document_scanned" as const,
+        title: `Warehouse Invoice Verified - ${shipment.shipmentNumber}`,
+        description: `Warehouse fees validated against facility records`,
+        status: "in_review" as APStatus
+      },
+    ] : []),
+    {
+      delay: 2000,
+      type: "audit_complete" as const,
+      title: `AP Audit Complete - ${shipment.shipmentNumber}`,
+      description: `All ${shipment.apInvoices.length} invoices verified. Total $${totalAPAmount.toLocaleString()} approved for payment.`,
+      status: "audit_pass" as APStatus
+    },
   ] as SimStep[];
 };
 
-const createARSteps = (shipment: Shipment, currentActivities: Activity[] = []): SimStep[] => [
-  {
-    delay: 1000,
-    type: "email_received" as const,
-    title: `AR Job Opened - ${shipment.shipmentNumber}`,
-    description: `Initiating accounts receivable process for shipment to ${shipment.shipper}`,
-    status: "preparing" as ARStatus
-  },
-  {
-    delay: 2000,
-    type: "document_scanned" as const,
-    title: `Reviewing Agreement - ${shipment.shipmentNumber}`,
-    description: `Scanning shipper agreement with ${shipment.shipper}`,
-    status: "preparing" as ARStatus,
-    document: { name: "Shipper Agreement", url: "/demo/emails/email_04_shipper_broker_arrangement.pdf" }
-  },
-  {
-    delay: 2000,
-    type: "document_scanned" as const,
-    title: `Lane Contract Verified - ${shipment.shipmentNumber}`,
-    description: `Lane contract confirms rate for ${shipment.origin} to ${shipment.destination}`,
-    status: "preparing" as ARStatus,
-    document: { name: "Lane Contract", url: "/demo/documents/06_lane_contract.pdf" }
-  },
-  {
-    delay: 2000,
-    type: "invoice_created" as const,
-    title: `Invoice Generated - ${shipment.shipmentNumber}`,
-    description: `Created broker invoice for ${shipment.shipper}${shipment.detentionCharge ? ` including $${shipment.detentionCharge} detention` : ''}`,
-    status: "preparing" as ARStatus,
-    document: { name: "Broker Invoice", url: "/demo/documents/07_broker_invoice.pdf" }
-  },
-  {
-    delay: 2000,
-    type: "document_scanned" as const,
-    title: `Evidence Packet Ready - ${shipment.shipmentNumber}`,
-    description: `Compiled POD, delivery confirmation, and supporting documentation`,
-    status: "for_review" as ARStatus
-  },
-  {
-    delay: 2000,
-    type: "email_draft" as const,
-    title: `Drafting Shipper Invoice - ${shipment.shipmentNumber}`,
-    description: `Drafted invoice email to ${shipment.shipper} for review`,
-    status: "for_review" as ARStatus,
-    requiresApproval: true,
-    draftContent: {
-      to: "jwu@pacificrimports.com",
-      subject: `Invoice for Shipment ${shipment.shipmentNumber}`,
-      body: `Attached is the invoice for shipment ${shipment.shipmentNumber} from ${shipment.origin} to ${shipment.destination}.\n\nLine Items:\n- Base Freight: $${shipment.laneRate.toLocaleString()}\n${shipment.detentionCharge ? `- Detention: $${shipment.detentionCharge.toLocaleString()}\n` : ''}- Total Amount: $${shipment.invoiceAmount.toLocaleString()}\n\nPlease find the following documents attached:\n- Broker Invoice\n- Proof of Delivery\n- Bill of Lading\n\nKind regards,\nSentie`
-    }
-  },
-  {
-    delay: 1000,
-    type: "email_sent" as const,
-    title: `Invoice Sent - ${shipment.shipmentNumber}`,
-    description: `Invoice emailed to ${shipment.shipper} with attached documentation`,
-    status: "submitted" as ARStatus,
-    document: { name: "Invoice Email", url: "/demo/emails/email_05_broker_invoice_to_shipper.pdf" }
-  },
-  {
-    delay: 5000,
-    type: "payment_received" as const,
-    title: `AR Complete - ${shipment.shipmentNumber}`,
-    description: `Invoice submitted to ${shipment.shipper}. Payment tracking initiated.`,
-    status: "submitted" as ARStatus
-  },
-];
+const createARSteps = (shipment: Shipment, currentActivities: Activity[] = []): SimStep[] => {
+  // Get detention from carrier invoice if any
+  const carrierInvoice = getCarrierInvoice(shipment);
+  const detentionCharge = carrierInvoice?.detentionCharge || 0;
+  const totalAPCost = getTotalAPAmount(shipment.apInvoices);
+  const margin = shipment.arInvoiceAmount - totalAPCost;
+
+  return [
+    {
+      delay: 1000,
+      type: "email_received" as const,
+      title: `AR Job Opened - ${shipment.shipmentNumber}`,
+      description: `Initiating accounts receivable process for shipment to ${shipment.shipper}`,
+      status: "preparing" as ARStatus
+    },
+    {
+      delay: 2000,
+      type: "document_scanned" as const,
+      title: `Reviewing Agreement - ${shipment.shipmentNumber}`,
+      description: `Scanning shipper agreement with ${shipment.shipper}`,
+      status: "preparing" as ARStatus,
+      document: { name: "Shipper Agreement", url: "/demo/emails/email_04_shipper_broker_arrangement.pdf" }
+    },
+    {
+      delay: 2000,
+      type: "document_scanned" as const,
+      title: `Lane Contract Verified - ${shipment.shipmentNumber}`,
+      description: `Lane contract confirms rate for ${shipment.origin} to ${shipment.destination}`,
+      status: "preparing" as ARStatus,
+      document: { name: "Lane Contract", url: "/demo/documents/06_lane_contract.pdf" }
+    },
+    {
+      delay: 2000,
+      type: "invoice_created" as const,
+      title: `Invoice Generated - ${shipment.shipmentNumber}`,
+      description: `Created broker invoice for ${shipment.shipper} - Total: $${shipment.arInvoiceAmount.toLocaleString()}${detentionCharge ? ` (includes $${detentionCharge} detention pass-through)` : ''}`,
+      status: "preparing" as ARStatus,
+      document: { name: "Broker Invoice", url: "/demo/documents/07_broker_invoice.pdf" }
+    },
+    {
+      delay: 2000,
+      type: "document_scanned" as const,
+      title: `Evidence Packet Ready - ${shipment.shipmentNumber}`,
+      description: `Compiled POD, delivery confirmation, and supporting documentation`,
+      status: "for_review" as ARStatus
+    },
+    {
+      delay: 2000,
+      type: "email_draft" as const,
+      title: `Drafting Shipper Invoice - ${shipment.shipmentNumber}`,
+      description: `Drafted invoice email to ${shipment.shipper} for review`,
+      status: "for_review" as ARStatus,
+      requiresApproval: true,
+      draftContent: {
+        to: "jwu@pacificrimports.com",
+        subject: `Invoice for Shipment ${shipment.shipmentNumber}`,
+        body: `Attached is the invoice for shipment ${shipment.shipmentNumber} from ${shipment.origin} to ${shipment.destination}.\n\nLine Items:\n- Base Freight: $${shipment.laneRate.toLocaleString()}\n${detentionCharge ? `- Detention: $${detentionCharge.toLocaleString()}\n` : ''}- Service Fee: $${margin > 0 ? margin.toLocaleString() : '0'}\n- Total Amount: $${shipment.arInvoiceAmount.toLocaleString()}\n\nPlease find the following documents attached:\n- Broker Invoice\n- Proof of Delivery\n- Bill of Lading\n\nKind regards,\nSentie`
+      }
+    },
+    {
+      delay: 1000,
+      type: "email_sent" as const,
+      title: `Invoice Sent - ${shipment.shipmentNumber}`,
+      description: `Invoice emailed to ${shipment.shipper} with attached documentation`,
+      status: "submitted" as ARStatus,
+      document: { name: "Invoice Email", url: "/demo/emails/email_05_broker_invoice_to_shipper.pdf" }
+    },
+    {
+      delay: 5000,
+      type: "payment_received" as const,
+      title: `AR Complete - ${shipment.shipmentNumber}`,
+      description: `Invoice submitted to ${shipment.shipper}. Payment tracking initiated.`,
+      status: "submitted" as ARStatus
+    },
+  ];
+};
 
 
 export default function Dashboard() {
@@ -473,9 +554,72 @@ export default function Dashboard() {
 
       setActivities(prev => [newActivity, ...prev]);
 
-      setShipments(prev => prev.map(s =>
-        s.id === shipment.id ? { ...s, apStatus: step.status as APStatus } : s
-      ));
+      // Update shipment status and individual invoice statuses
+      setShipments(prev => prev.map(s => {
+        if (s.id !== shipment.id) return s;
+
+        // Update invoice statuses based on activity, and ADD invoices when received
+        let updatedInvoices = [...s.apInvoices];
+
+        // Carrier invoice: ADD when first received, then update status
+        if (step.title.includes('Carrier Invoice Analysis')) {
+          const template = getInvoiceTemplate(shipment.id, 'carrier');
+          if (template && !updatedInvoices.some(inv => inv.type === 'carrier')) {
+            // Add the carrier invoice with 'in_review' status
+            updatedInvoices.push({ ...template, status: 'in_review' as APInvoiceStatus, createdAt: new Date() });
+          } else {
+            // Update existing carrier invoice status
+            updatedInvoices = updatedInvoices.map(inv =>
+              inv.type === 'carrier' ? { ...inv, status: 'in_review' as APInvoiceStatus } : inv
+            );
+          }
+        } else if (step.title.includes('Detention Verified') || (step.type === 'audit_complete' && !step.title.includes('Customs') && !step.title.includes('Warehouse'))) {
+          updatedInvoices = updatedInvoices.map(inv =>
+            inv.type === 'carrier' ? { ...inv, status: 'audit_pass' as APInvoiceStatus } : inv
+          );
+        }
+
+        // Customs invoice: ADD when first received, then update status
+        if (step.title.includes('Customs Invoice Received')) {
+          const template = getInvoiceTemplate(shipment.id, 'customs');
+          if (template && !updatedInvoices.some(inv => inv.type === 'customs')) {
+            // Add the customs invoice with 'in_review' status
+            updatedInvoices.push({ ...template, status: 'in_review' as APInvoiceStatus, createdAt: new Date() });
+          } else {
+            updatedInvoices = updatedInvoices.map(inv =>
+              inv.type === 'customs' ? { ...inv, status: 'in_review' as APInvoiceStatus } : inv
+            );
+          }
+        } else if (step.title.includes('Customs Invoice Verified')) {
+          updatedInvoices = updatedInvoices.map(inv =>
+            inv.type === 'customs' ? { ...inv, status: 'audit_pass' as APInvoiceStatus } : inv
+          );
+        }
+
+        // Warehouse invoice: ADD when first received, then update status
+        if (step.title.includes('Warehouse Invoice Received')) {
+          const template = getInvoiceTemplate(shipment.id, 'warehouse');
+          if (template && !updatedInvoices.some(inv => inv.type === 'warehouse')) {
+            // Add the warehouse invoice with 'in_review' status
+            updatedInvoices.push({ ...template, status: 'in_review' as APInvoiceStatus, createdAt: new Date() });
+          } else {
+            updatedInvoices = updatedInvoices.map(inv =>
+              inv.type === 'warehouse' ? { ...inv, status: 'in_review' as APInvoiceStatus } : inv
+            );
+          }
+        } else if (step.title.includes('Warehouse Invoice Verified')) {
+          updatedInvoices = updatedInvoices.map(inv =>
+            inv.type === 'warehouse' ? { ...inv, status: 'audit_pass' as APInvoiceStatus } : inv
+          );
+        }
+
+        // All invoices pass when audit completes
+        if (step.type === 'audit_complete') {
+          updatedInvoices = updatedInvoices.map(inv => ({ ...inv, status: 'audit_pass' as APInvoiceStatus }));
+        }
+
+        return { ...s, apStatus: step.status as APStatus, apInvoices: updatedInvoices };
+      }));
 
       // When AP audit is complete for this shipment, start AR
       if (step.type === "audit_complete") {
@@ -808,6 +952,7 @@ export default function Dashboard() {
                 <ShipmentTable
                   shipments={filteredShipments}
                   activeTab="ap"
+                  activities={activities}
                   onShipmentClick={setSelectedShipment}
                 />
               </CardContent>
@@ -865,6 +1010,7 @@ export default function Dashboard() {
                 <ShipmentTable
                   shipments={filteredShipments}
                   activeTab="ar"
+                  activities={activities}
                   onShipmentClick={setSelectedShipment}
                 />
               </CardContent>
@@ -924,5 +1070,4 @@ export default function Dashboard() {
     </div>
   );
 }
-
 

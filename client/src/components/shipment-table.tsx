@@ -1,10 +1,28 @@
+import { useMemo } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import type { Shipment, APStatus, ARStatus } from "@shared/schema";
+import type { Shipment, APStatus, ARStatus, APInvoice, APInvoiceStatus, Activity } from "@shared/schema";
+
+// Helper to get the "worst" status among AP invoices (for color coding)
+const getWorstAPInvoiceStatus = (invoices: APInvoice[]): APInvoiceStatus => {
+  const statusPriority: APInvoiceStatus[] = ["in_dispute", "pending", "received", "in_review", "audit_pass", "paid"];
+  for (const status of statusPriority) {
+    if (invoices.some(inv => inv.status === status)) {
+      return status;
+    }
+  }
+  return "pending";
+};
+
+// Helper to calculate total AP invoice amount
+const getTotalAPAmount = (invoices: APInvoice[]): number => {
+  return invoices.reduce((sum, inv) => sum + inv.amount + (inv.detentionCharge || 0), 0);
+};
 
 interface ShipmentTableProps {
   shipments: Shipment[];
   activeTab: "ap" | "ar";
+  activities: Activity[];
   onShipmentClick?: (shipment: Shipment) => void;
 }
 
@@ -26,7 +44,25 @@ const arStatusConfig: Record<ARStatus, { label: string; variant: "default" | "se
   input_required: { label: "Input Required", variant: "destructive" }
 };
 
-export function ShipmentTable({ shipments, activeTab, onShipmentClick }: ShipmentTableProps) {
+export function ShipmentTable({ shipments, activeTab, activities, onShipmentClick }: ShipmentTableProps) {
+  const documentsByShipment = useMemo(() => {
+    const map = new Map<string, string[]>();
+    activities.forEach((activity) => {
+      const documentName = activity.metadata?.document?.name;
+      if (!documentName) return;
+      const current = map.get(activity.shipmentId);
+      if (current) {
+        current.push(documentName.toLowerCase());
+      } else {
+        map.set(activity.shipmentId, [documentName.toLowerCase()]);
+      }
+    });
+    return map;
+  }, [activities]);
+
+  const hasDocumentNamed = (documentNames: string[], needle: string) =>
+    documentNames.some((name) => name.includes(needle));
+
   if (shipments.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -57,6 +93,22 @@ export function ShipmentTable({ shipments, activeTab, onShipmentClick }: Shipmen
             const statusConfig = activeTab === "ap"
               ? apStatusConfig[shipment.apStatus]
               : arStatusConfig[shipment.arStatus];
+            const documentNames = documentsByShipment.get(shipment.id) ?? [];
+            const hasRateConfirmation = hasDocumentNamed(documentNames, "rate confirmation");
+            const hasBrokerInvoice = hasDocumentNamed(documentNames, "broker invoice");
+            const hasCarrierInvoice = hasDocumentNamed(documentNames, "carrier invoice");
+            const hasCustomsInvoice = hasDocumentNamed(documentNames, "customs");
+            const hasWarehouseInvoice = hasDocumentNamed(documentNames, "warehouse invoice");
+            const invoiceHasDocs = (invoice: APInvoice) =>
+              invoice.status !== "pending"
+              || (invoice.type === "carrier" ? hasCarrierInvoice : invoice.type === "customs" ? hasCustomsInvoice : hasWarehouseInvoice);
+            const receivedInvoices = shipment.apInvoices.filter(invoiceHasDocs);
+            const apInvoiceTotal = getTotalAPAmount(receivedInvoices);
+            const receivedInvoiceCount = receivedInvoices.length;
+            const totalInvoiceCount = shipment.apInvoices.length;
+            const invoiceSummary = totalInvoiceCount === receivedInvoiceCount
+              ? `${totalInvoiceCount} invoice${totalInvoiceCount !== 1 ? 's' : ''}`
+              : `${receivedInvoiceCount} of ${totalInvoiceCount} invoices received`;
 
             return (
               <TableRow
@@ -78,16 +130,24 @@ export function ShipmentTable({ shipments, activeTab, onShipmentClick }: Shipmen
                   <TableCell>{shipment.shipper}</TableCell>
                 )}
                 <TableCell className="text-right font-medium">
-                  ${activeTab === "ap"
-                    ? shipment.laneRate.toLocaleString()
-                    : shipment.invoiceAmount.toLocaleString()}
+                  {activeTab === "ap"
+                    ? (hasRateConfirmation ? `$${shipment.laneRate.toLocaleString()}` : "Pending...")
+                    : (hasBrokerInvoice ? `$${shipment.arInvoiceAmount.toLocaleString()}` : "Pending...")}
                 </TableCell>
                 <TableCell className="text-right">
-                  <div className="font-medium">${shipment.invoiceAmount.toLocaleString()}</div>
-                  {activeTab === "ap" && shipment.detentionCharge && shipment.detentionCharge > 0 && (
-                    <div className="text-xs text-muted-foreground">
-                      +${shipment.detentionCharge} detention
-                    </div>
+                  {activeTab === "ap" ? (
+                    receivedInvoiceCount > 0 ? (
+                      <>
+                        <div className="font-medium">${apInvoiceTotal.toLocaleString()}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {invoiceSummary}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-xs text-muted-foreground italic">Awaiting invoices</div>
+                    )
+                  ) : (
+                    <div className="font-medium">${shipment.arInvoiceAmount.toLocaleString()}</div>
                   )}
                 </TableCell>
                 <TableCell className="text-center">

@@ -10,6 +10,41 @@ export const apStatusSchema = z.enum([
   "input_required"
 ]);
 
+// AP Invoice status (individual invoice level)
+export const apInvoiceStatusSchema = z.enum([
+  "pending",      // Invoice not yet received
+  "received",     // Invoice received, not yet reviewed
+  "in_review",    // Being audited
+  "audit_pass",   // Verified, ready for payment
+  "in_dispute",   // Issue found
+  "paid"          // Payment complete
+]);
+
+// AP Invoice types (vendor categories)
+export const apInvoiceTypeSchema = z.enum([
+  "carrier",      // Main carrier invoice
+  "customs",      // Customs broker fees
+  "warehouse"     // Warehouse/facility fees
+]);
+
+export type APInvoiceStatus = z.infer<typeof apInvoiceStatusSchema>;
+export type APInvoiceType = z.infer<typeof apInvoiceTypeSchema>;
+
+// AP Invoice schema
+export const apInvoiceSchema = z.object({
+  id: z.string(),
+  type: apInvoiceTypeSchema,
+  vendor: z.string(),
+  invoiceNumber: z.string().optional(),
+  amount: z.number(),
+  detentionCharge: z.number().optional(), // Only for carrier invoices
+  status: apInvoiceStatusSchema,
+  documentUrl: z.string().optional(),
+  createdAt: z.date()
+});
+
+export type APInvoice = z.infer<typeof apInvoiceSchema>;
+
 // Shipment status for AR (Accounts Receivable)
 export const arStatusSchema = z.enum([
   "preparing",
@@ -48,8 +83,10 @@ export const shipmentSchema = z.object({
   carrier: z.string(),
   shipper: z.string(),
   laneRate: z.number(),
-  invoiceAmount: z.number(),
-  detentionCharge: z.number().optional(),
+  // AP Invoices - multiple invoices from different vendors
+  apInvoices: z.array(apInvoiceSchema),
+  // AR Invoice - single consolidated invoice to shipper
+  arInvoiceAmount: z.number(),
   apStatus: apStatusSchema,
   arStatus: arStatusSchema,
   createdAt: z.date(),

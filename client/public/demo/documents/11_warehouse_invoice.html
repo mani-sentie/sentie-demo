@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Warehouse Invoice - Phoenix Logistics Center</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            padding: 40px;
+            color: #333;
+        }
+        .invoice {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 50px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 40px;
+            padding-bottom: 30px;
+            border-bottom: 3px solid #059669;
+        }
+        .company-info h1 {
+            color: #059669;
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+        .company-info p {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .invoice-title {
+            text-align: right;
+        }
+        .invoice-title h2 {
+            font-size: 36px;
+            color: #059669;
+            margin-bottom: 10px;
+        }
+        .invoice-title .invoice-number {
+            font-size: 16px;
+            color: #666;
+        }
+        .details-section {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 40px;
+        }
+        .bill-to, .invoice-details {
+            width: 48%;
+        }
+        .section-title {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #999;
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+        }
+        .bill-to h3, .invoice-details h3 {
+            font-size: 18px;
+            margin-bottom: 5px;
+        }
+        .bill-to p, .invoice-details p {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .reference-box {
+            background: #ecfdf5;
+            border-left: 4px solid #059669;
+            padding: 15px 20px;
+            margin-bottom: 30px;
+        }
+        .reference-box p {
+            font-size: 14px;
+            color: #333;
+        }
+        .reference-box strong {
+            color: #059669;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+        }
+        th {
+            background: #059669;
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        th:nth-child(2), th:nth-child(3), th:last-child {
+            text-align: right;
+        }
+        td {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            font-size: 14px;
+        }
+        td:nth-child(2), td:nth-child(3), td:last-child {
+            text-align: right;
+        }
+        td:last-child {
+            font-weight: 500;
+        }
+        tr:hover {
+            background: #fafafa;
+        }
+        .totals {
+            display: flex;
+            justify-content: flex-end;
+        }
+        .totals-table {
+            width: 300px;
+        }
+        .totals-table td {
+            padding: 10px 15px;
+            border: none;
+        }
+        .totals-table tr:last-child {
+            background: #059669;
+        }
+        .totals-table tr:last-child td {
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            padding: 15px;
+        }
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+        }
+        .payment-info h4 {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        .payment-info p {
+            font-size: 13px;
+            color: #666;
+        }
+        .terms {
+            text-align: right;
+            font-size: 13px;
+            color: #666;
+        }
+        .terms strong {
+            color: #059669;
+        }
+        .facility-badge {
+            display: inline-block;
+            background: #059669;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="invoice">
+        <div class="header">
+            <div class="company-info">
+                <h1>Phoenix Logistics Center</h1>
+                <p>Full-Service Warehouse & Distribution<br>
+                4500 Industrial Parkway<br>
+                Phoenix, AZ 85043<br>
+                Tel: (602) 555-0892 | billing@phoenixlogistics.com</p>
+            </div>
+            <div class="invoice-title">
+                <h2>INVOICE</h2>
+                <p class="invoice-number">INV-WH-2026-3847</p>
+            </div>
+        </div>
+
+        <div class="details-section">
+            <div class="bill-to">
+                <p class="section-title">Bill To</p>
+                <h3>Sentie Freight Services</h3>
+                <p>8900 Logistics Way<br>
+                Los Angeles, CA 90001<br>
+                accounts@sentie.ai</p>
+            </div>
+            <div class="invoice-details">
+                <p class="section-title">Invoice Details</p>
+                <p><strong>Invoice Date:</strong> January 29, 2026<br>
+                <strong>Due Date:</strong> February 13, 2026<br>
+                <strong>Terms:</strong> Net 15</p>
+            </div>
+        </div>
+
+        <div class="reference-box">
+            <p><strong>Reference:</strong> Shipment WFL-2026-0847 | Consignee: Pacific Rim Imports Inc<br>
+            <strong>Arrival:</strong> January 27, 2026 @ 14:30 | <strong>Release:</strong> January 29, 2026 @ 09:15<br>
+            <strong>Facility:</strong> Building C, Dock 12 <span class="facility-badge">Cross-Dock</span></p>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Description</th>
+                    <th>Qty</th>
+                    <th>Rate</th>
+                    <th>Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Truck Unloading - Standard (26 pallets)</td>
+                    <td>26</td>
+                    <td>$4.50/pallet</td>
+                    <td>$117.00</td>
+                </tr>
+                <tr>
+                    <td>Cross-Dock Handling & Staging</td>
+                    <td>1</td>
+                    <td>$33.00</td>
+                    <td>$33.00</td>
+                </tr>
+                <tr>
+                    <td>Storage - Pallet Positions (2 days @ 26 pallets)</td>
+                    <td>52</td>
+                    <td>$0.75/day</td>
+                    <td>$39.00</td>
+                </tr>
+                <tr>
+                    <td>Pallet Exchange/Repalletization (6 pallets)</td>
+                    <td>6</td>
+                    <td>$8.50/pallet</td>
+                    <td>$51.00</td>
+                </tr>
+                <tr>
+                    <td>Outbound Loading to Delivery Truck</td>
+                    <td>1</td>
+                    <td>$10.00</td>
+                    <td>$10.00</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="totals">
+            <table class="totals-table">
+                <tr>
+                    <td>Subtotal</td>
+                    <td>$250.00</td>
+                </tr>
+                <tr>
+                    <td>Fuel Surcharge (0%)</td>
+                    <td>$0.00</td>
+                </tr>
+                <tr>
+                    <td>Total Due</td>
+                    <td>$250.00</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="footer">
+            <div class="payment-info">
+                <h4>Payment Information</h4>
+                <p>Bank: Arizona Commerce Bank<br>
+                Account: Phoenix Logistics LLC<br>
+                Routing: 122105155 | Account: 445566778899<br>
+                <em>ACH payments preferred</em></p>
+            </div>
+            <div class="terms">
+                <p>Payment is due within <strong>15 days</strong> of invoice date.<br>
+                Storage charges accrue at $0.75/pallet/day after release.<br>
+                Questions? Contact billing@phoenixlogistics.com</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -4,7 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { FileText, Truck, MapPin, DollarSign, Clock, CheckCircle, AlertCircle, Mail, ExternalLink, Circle, Loader2, ChevronDown, ChevronRight, Check } from "lucide-react";
-import type { Shipment, Activity, Document } from "@shared/schema";
+import type { Shipment, Activity, Document, APInvoice, APInvoiceStatus, APInvoiceType } from "@shared/schema";
+import { Truck as TruckIcon, Package, Building2 } from "lucide-react";
 import { format } from "date-fns";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -39,12 +40,40 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
     if (!shipment) return null;
 
     const [expandedActivities, setExpandedActivities] = useState<Record<string, boolean>>({});
+    const pendingActivity = activities.find(a => a.shipmentId === shipment.id && a.metadata?.pendingAction);
+    const hasPendingAction = Boolean(shipment.pendingAction);
+    const isAPComplete = shipment.apStatus === 'audit_pass' || shipment.apStatus === 'paid';
+    const canStartAR = isAPComplete;
+    const isARComplete = canStartAR && (shipment.arStatus === 'submitted' || shipment.arStatus === 'collected');
 
     const toggleActivity = (id: string) => {
         setExpandedActivities(prev => ({ ...prev, [id]: !prev[id] }));
     };
 
     // --- Checklist Logic ---
+    const applyPendingActionGate = (items: ChecklistItem[]): ChecklistItem[] => {
+        if (!hasPendingAction) return items;
+
+        const updated = items.map(item => ({ ...item }));
+        const firstNonCompletedIndex = updated.findIndex(item => item.status !== 'completed');
+
+        if (firstNonCompletedIndex === -1) {
+            const lastIndex = updated.length - 1;
+            updated[lastIndex] = { ...updated[lastIndex], status: 'action_required' };
+            return updated;
+        }
+
+        if (updated[firstNonCompletedIndex].status !== 'issue') {
+            updated[firstNonCompletedIndex].status = 'action_required';
+        }
+
+        for (let i = firstNonCompletedIndex + 1; i < updated.length; i++) {
+            updated[i].status = 'pending';
+        }
+
+        return updated;
+    };
+
     const getChecklistItems = (): ChecklistItem[] => {
         const items: ChecklistItem[] = [];
 
@@ -58,7 +87,8 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
             // 2. If detention charge exists, it MUST have detention-specific verification activities (ELD or Gate Log).
             // NOTE: Do NOT bypass this check based on apStatus - detention must be resolved first.
             // NOTE: If there's a pending action (e.g. draft to review), detention is NOT verified yet.
-            const hasDetention = (shipment.detentionCharge ?? 0) > 0;
+            const carrierInvoice = shipment.apInvoices.find(inv => inv.type === 'carrier');
+            const hasDetention = (carrierInvoice?.detentionCharge ?? 0) > 0;
             const detentionVerified = !shipment.pendingAction && activities.some(a =>
                 (a.title.includes('ELD') || a.title.includes('Gate Log') || a.title.includes('Detention')) &&
                 (a.title.includes('Verified') || a.title.includes('Resolved'))
@@ -100,14 +130,14 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
 
         } else {
             // AR Logic
-            const sent = shipment.arStatus === 'submitted' || shipment.arStatus === 'collected';
+            const sent = isARComplete;
 
-            const hasLoadData = true; // Always start here
+            const hasLoadData = canStartAR; // AR only starts after AP completes
             // Tie logic strictly to activities or final status
-            const loadedRateContract = sent || activities.some(a => a.category === 'ar' && (a.title.includes('Agreement') || a.title.includes('Contract')));
-            const calculatedCharge = sent || activities.some(a => a.category === 'ar' && a.type === 'invoice_created');
-            const foundAccessorials = sent || activities.some(a => a.category === 'ar' && a.title.includes('Evidence'));
-            const builtPacket = sent || activities.some(a => a.category === 'ar' && (a.title.includes('Packet') || a.title.includes('Drafting')));
+            const loadedRateContract = canStartAR && (sent || activities.some(a => a.category === 'ar' && (a.title.includes('Agreement') || a.title.includes('Contract'))));
+            const calculatedCharge = canStartAR && (sent || activities.some(a => a.category === 'ar' && a.type === 'invoice_created'));
+            const foundAccessorials = canStartAR && (sent || activities.some(a => a.category === 'ar' && a.title.includes('Evidence')));
+            const builtPacket = canStartAR && (sent || activities.some(a => a.category === 'ar' && (a.title.includes('Packet') || a.title.includes('Drafting'))));
 
             const check1 = hasLoadData;
             const check2 = check1 && loadedRateContract;
@@ -117,6 +147,7 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
             const check6 = sent;
 
             const getStatus = (isCompleted: boolean, previousCompleted: boolean): ChecklistItemStatus => {
+                if (!canStartAR) return 'pending';
                 if (isCompleted) return 'completed';
                 if (previousCompleted) {
                     if (shipment.arStatus === 'in_dispute') return 'issue';
@@ -133,7 +164,7 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
             items.push({ id: 'ar-5', label: 'Building evidence packet', status: getStatus(check5, check4) });
             items.push({ id: 'ar-6', label: 'Send', status: getStatus(check6, check5) });
         }
-        return items;
+        return applyPendingActionGate(items);
     };
 
     const checklistItems = getChecklistItems();
@@ -255,12 +286,11 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
         return groups.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
     };
 
-    const groupedActivities = groupActivities(activities.filter(a => a.shipmentId === shipment.id && (!context || a.category === context)));
+    const scopedActivities = activities.filter(a => a.shipmentId === shipment.id && (!context || a.category === context));
+    const groupedActivities = groupActivities(context === 'ar' && !canStartAR ? [] : scopedActivities);
 
     // Determine current processing state for UI
-    const isShipmentComplete = context === 'ap'
-        ? (shipment.apStatus === 'audit_pass' || shipment.apStatus === 'paid')
-        : (shipment.arStatus === 'submitted' || shipment.arStatus === 'collected');
+    const isShipmentComplete = context === 'ap' ? isAPComplete : isARComplete;
 
     // If shipment is not complete, the LAST group (latest in time) is the "Active" one.
     if (!isShipmentComplete && groupedActivities.length > 0) {
@@ -274,8 +304,8 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
     }
 
     // Extract documents (same as before logic, just helper now)
-    const documents = activities
-        .filter(a => a.shipmentId === shipment.id && a.metadata?.document && (!context || a.category === context))
+    const documents = (context === 'ar' && !canStartAR ? [] : scopedActivities)
+        .filter(a => a.metadata?.document)
         .map(a => ({
             name: a.metadata!.document!.name,
             url: a.metadata!.document!.url,
@@ -284,13 +314,22 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
         }))
         .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
-    // Financial discovery logic (preserved)
-    const isAPComplete = shipment.apStatus === 'audit_pass' || shipment.apStatus === 'paid';
-    const isARComplete = shipment.arStatus === 'submitted' || shipment.arStatus === 'collected';
-    const showLaneRate = isAPComplete || activities.some(a => a.shipmentId === shipment.id && a.title.includes("Rate Con Verified"));
-    const showInvoiceAmount = isAPComplete || activities.some(a => a.shipmentId === shipment.id && a.title.includes("Invoice Analysis"));
-    const showDetention = isAPComplete || activities.some(a => a.shipmentId === shipment.id && a.title.includes("ELD Report Verified"));
-    const showARAmount = isARComplete || activities.some(a => a.shipmentId === shipment.id && (a.type === "invoice_created" || a.title.includes("Invoice Generated")));
+    const documentNames = documents.map(doc => doc.name.toLowerCase());
+    const hasDocumentNamed = (needle: string) => documentNames.some(name => name.includes(needle));
+    const hasBrokerInvoiceDoc = hasDocumentNamed("broker invoice");
+    const hasCarrierInvoiceDoc = hasDocumentNamed("carrier invoice");
+    const hasCustomsInvoiceDoc = hasDocumentNamed("customs");
+    const hasWarehouseInvoiceDoc = hasDocumentNamed("warehouse invoice");
+    const showARAmount = canStartAR && (isARComplete || hasBrokerInvoiceDoc);
+    const hasInvoiceDocForType = (type: APInvoiceType) => {
+        if (type === "carrier") return hasCarrierInvoiceDoc;
+        if (type === "customs") return hasCustomsInvoiceDoc;
+        return hasWarehouseInvoiceDoc;
+    };
+    const isInvoiceAmountVisible = (invoice: APInvoice) =>
+        invoice.status !== "pending" || hasInvoiceDocForType(invoice.type);
+    const apInvoicesWithDocs = shipment.apInvoices.filter(inv => isInvoiceAmountVisible(inv));
+    const apTotalAmount = apInvoicesWithDocs.reduce((sum, inv) => sum + inv.amount + (inv.detentionCharge || 0), 0);
 
     const currentApStatus = shipment.apStatus as string;
     const currentArStatus = shipment.arStatus as string;
@@ -335,7 +374,6 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
                                             return "Action Required: Verify Detention Documents";
                                         }
                                         // Find the activity that triggered this action
-                                        const pendingActivity = activities.find(a => a.type === 'email_draft' && a.metadata?.pendingAction);
                                         if (!pendingActivity) return "Action Required: Email Draft Pending Review";
 
                                         if (pendingActivity.title.includes("Detention")) return "Action Required: Review Detention Request Draft";
@@ -454,28 +492,79 @@ export function ShipmentDetailsDialog({ shipment, activities, open, onOpenChange
                                     <CardHeader className="py-2 px-4 bg-muted/50">
                                         <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                                             <DollarSign className="h-3 w-3" />
-                                            Financials
+                                            {context === 'ap' ? `AP Invoices (${shipment.apInvoices.length})` : 'AR Invoice'}
                                         </CardTitle>
                                     </CardHeader>
                                     <CardContent className="p-3 space-y-2">
-                                        <div className="flex justify-between items-center text-sm">
-                                            <span className="text-muted-foreground">{context === 'ar' ? 'Shipper Rate' : 'Lane Rate'}</span>
-                                            <span className="font-medium">
-                                                {context === 'ar' ? (showARAmount ? `$${shipment.invoiceAmount.toLocaleString()}` : 'Pending...') : (showLaneRate ? `$${shipment.laneRate.toLocaleString()}` : 'Processing...')}
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between items-center text-sm">
-                                            <span className="text-muted-foreground">{context === 'ar' ? 'Broker Amount' : 'Invoice Amount'}</span>
-                                            <span className="font-medium">
-                                                {context === 'ar' ? (showARAmount ? `$${shipment.invoiceAmount.toLocaleString()}` : 'Pending...') : (showInvoiceAmount ? `$${shipment.invoiceAmount.toLocaleString()}` : 'Processing...')}
-                                            </span>
-                                        </div>
-                                        {(context === 'ap' && shipment.detentionCharge) && (
+                                        {context === 'ap' ? (
                                             <>
-                                                <Separator />
-                                                <div className={`flex justify-between items-center text-sm ${showDetention ? 'text-amber-600' : 'text-muted-foreground opacity-50'}`}>
-                                                    <span className="font-medium">Detention</span>
-                                                    <span className="font-medium">{showDetention ? `+$${shipment.detentionCharge}` : 'Analyzing...'}</span>
+                                                {/* AP Invoices List */}
+                                                {shipment.apInvoices.length > 0 ? (
+                                                    <>
+                                                        {shipment.apInvoices.map((invoice, idx) => {
+                                                            const InvoiceIcon = invoice.type === 'carrier' ? TruckIcon : invoice.type === 'customs' ? FileText : Building2;
+                                                            const typeLabel = invoice.type === 'carrier' ? 'Carrier' : invoice.type === 'customs' ? 'Customs' : 'Warehouse';
+                                                            const statusColor = invoice.status === 'audit_pass' || invoice.status === 'paid' ? 'text-green-600' :
+                                                                invoice.status === 'in_dispute' ? 'text-red-600' :
+                                                                    invoice.status === 'in_review' ? 'text-blue-600' :
+                                                                        invoice.status === 'received' ? 'text-amber-600' : 'text-muted-foreground';
+                                                            const statusLabel = invoice.status.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
+                                                            const isAmountVisible = isInvoiceAmountVisible(invoice);
+
+                                                            return (
+                                                                <div key={invoice.id}>
+                                                                    {idx > 0 && <Separator className="my-2" />}
+                                                                    <div className="space-y-1">
+                                                                        <div className="flex items-center justify-between">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <InvoiceIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                                                                                <span className="text-xs font-medium text-muted-foreground">{typeLabel}</span>
+                                                                            </div>
+                                                                            <span className={`text-xs font-medium ${statusColor}`}>{statusLabel}</span>
+                                                                        </div>
+                                                                        <div className="flex justify-between items-center">
+                                                                            <span className="text-sm truncate max-w-[120px]">{invoice.vendor}</span>
+                                                                            <span className="text-sm font-semibold">
+                                                                                {isAmountVisible ? `$${(invoice.amount + (invoice.detentionCharge || 0)).toLocaleString()}` : 'Pending...'}
+                                                                            </span>
+                                                                        </div>
+                                                                        {isAmountVisible && invoice.detentionCharge && invoice.detentionCharge > 0 && (
+                                                                            <div className="text-xs text-amber-600 text-right">
+                                                                                incl. ${invoice.detentionCharge} detention
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                        <Separator className="my-2" />
+                                                        <div className="flex justify-between items-center pt-1">
+                                                            <span className="text-sm font-semibold">Total AP</span>
+                                                            <span className="text-sm font-bold">
+                                                                {apInvoicesWithDocs.length > 0 ? `$${apTotalAmount.toLocaleString()}` : 'Pending...'}
+                                                            </span>
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <div className="text-center py-4 text-sm text-muted-foreground italic">
+                                                        No invoices received yet
+                                                    </div>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <>
+                                                {/* AR Single Invoice */}
+                                                <div className="flex justify-between items-center text-sm">
+                                                    <span className="text-muted-foreground">Shipper Rate</span>
+                                                    <span className="font-medium">
+                                                        {showARAmount ? `$${shipment.arInvoiceAmount.toLocaleString()}` : 'Pending...'}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between items-center text-sm">
+                                                    <span className="text-muted-foreground">Broker Invoice</span>
+                                                    <span className="font-medium">
+                                                        {showARAmount ? `$${shipment.arInvoiceAmount.toLocaleString()}` : 'Pending...'}
+                                                    </span>
                                                 </div>
                                             </>
                                         )}

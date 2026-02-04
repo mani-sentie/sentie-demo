@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customs Broker Invoice - Pacific Customs Services</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            padding: 40px;
+            color: #333;
+        }
+        .invoice {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 50px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 40px;
+            padding-bottom: 30px;
+            border-bottom: 3px solid #1e40af;
+        }
+        .company-info h1 {
+            color: #1e40af;
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+        .company-info p {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .invoice-title {
+            text-align: right;
+        }
+        .invoice-title h2 {
+            font-size: 36px;
+            color: #1e40af;
+            margin-bottom: 10px;
+        }
+        .invoice-title .invoice-number {
+            font-size: 16px;
+            color: #666;
+        }
+        .details-section {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 40px;
+        }
+        .bill-to, .invoice-details {
+            width: 48%;
+        }
+        .section-title {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #999;
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+        }
+        .bill-to h3, .invoice-details h3 {
+            font-size: 18px;
+            margin-bottom: 5px;
+        }
+        .bill-to p, .invoice-details p {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .reference-box {
+            background: #f0f7ff;
+            border-left: 4px solid #1e40af;
+            padding: 15px 20px;
+            margin-bottom: 30px;
+        }
+        .reference-box p {
+            font-size: 14px;
+            color: #333;
+        }
+        .reference-box strong {
+            color: #1e40af;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+        }
+        th {
+            background: #1e40af;
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        th:last-child {
+            text-align: right;
+        }
+        td {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            font-size: 14px;
+        }
+        td:last-child {
+            text-align: right;
+            font-weight: 500;
+        }
+        tr:hover {
+            background: #fafafa;
+        }
+        .totals {
+            display: flex;
+            justify-content: flex-end;
+        }
+        .totals-table {
+            width: 300px;
+        }
+        .totals-table td {
+            padding: 10px 15px;
+            border: none;
+        }
+        .totals-table tr:last-child {
+            background: #1e40af;
+        }
+        .totals-table tr:last-child td {
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            padding: 15px;
+        }
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+        }
+        .payment-info h4 {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        .payment-info p {
+            font-size: 13px;
+            color: #666;
+        }
+        .terms {
+            text-align: right;
+            font-size: 13px;
+            color: #666;
+        }
+        .terms strong {
+            color: #1e40af;
+        }
+    </style>
+</head>
+<body>
+    <div class="invoice">
+        <div class="header">
+            <div class="company-info">
+                <h1>Pacific Customs Services</h1>
+                <p>Licensed Customs Broker #12345<br>
+                1200 Harbor Boulevard, Suite 400<br>
+                Long Beach, CA 90802<br>
+                Tel: (562) 555-0147 | customs@pacificcustoms.com</p>
+            </div>
+            <div class="invoice-title">
+                <h2>INVOICE</h2>
+                <p class="invoice-number">INV-2026-CB-0847</p>
+            </div>
+        </div>
+
+        <div class="details-section">
+            <div class="bill-to">
+                <p class="section-title">Bill To</p>
+                <h3>Sentie Freight Services</h3>
+                <p>8900 Logistics Way<br>
+                Los Angeles, CA 90001<br>
+                accounts@sentie.ai</p>
+            </div>
+            <div class="invoice-details">
+                <p class="section-title">Invoice Details</p>
+                <p><strong>Invoice Date:</strong> January 28, 2026<br>
+                <strong>Due Date:</strong> February 27, 2026<br>
+                <strong>Terms:</strong> Net 30</p>
+            </div>
+        </div>
+
+        <div class="reference-box">
+            <p><strong>Reference:</strong> Shipment WFL-2026-0847 | Los Angeles to Phoenix<br>
+            <strong>Entry Number:</strong> 123-4567890-1 | <strong>Port:</strong> Long Beach, CA</p>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Description</th>
+                    <th>Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Customs Entry Filing - Formal Entry</td>
+                    <td>$150.00</td>
+                </tr>
+                <tr>
+                    <td>Continuous Customs Bond (Annual Premium Allocation)</td>
+                    <td>$75.00</td>
+                </tr>
+                <tr>
+                    <td>ISF 10+2 Filing Fee</td>
+                    <td>$50.00</td>
+                </tr>
+                <tr>
+                    <td>Document Processing & Compliance Review</td>
+                    <td>$25.00</td>
+                </tr>
+                <tr>
+                    <td>CBP Merchandise Processing Fee (Passed Through)</td>
+                    <td>$485.00</td>
+                </tr>
+                <tr>
+                    <td>Harbor Maintenance Fee (Passed Through)</td>
+                    <td>$15.00</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="totals">
+            <table class="totals-table">
+                <tr>
+                    <td>Subtotal (Services)</td>
+                    <td>$300.00</td>
+                </tr>
+                <tr>
+                    <td>Government Fees</td>
+                    <td>$500.00</td>
+                </tr>
+                <tr>
+                    <td>Total Due</td>
+                    <td>$800.00</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="footer">
+            <div class="payment-info">
+                <h4>Payment Information</h4>
+                <p>Bank: First National Bank<br>
+                Account: Pacific Customs Services<br>
+                Routing: 123456789 | Account: 987654321</p>
+            </div>
+            <div class="terms">
+                <p>Payment is due within <strong>30 days</strong> of invoice date.<br>
+                Please reference invoice number with payment.<br>
+                Thank you for your business!</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
